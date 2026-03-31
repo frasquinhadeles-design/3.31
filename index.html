@@ -3,26 +3,25 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>生日快乐 - 3D手势粒子系统</title>
+    <title>祝管老师生日快乐</title>
     <style>
-        body { margin: 0; overflow: hidden; background: radial-gradient(circle at center, #050505 0%, #000 100%); }
-        #canvas-container { width: 100vw; height: 100vh; }
+        body { margin: 0; overflow: hidden; background: #050505; }
         #loading {
             position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            color: #00ffff; font-family: "Microsoft YaHei"; text-align: center; z-index: 100;
+            color: #ff99cc; font-family: "Microsoft YaHei"; text-align: center; z-index: 100;
+            text-shadow: 0 0 10px rgba(255,153,204,0.5);
         }
-        /* 隐藏视频，仅供AI计算 */
-        #input-video { position: absolute; width: 1px; height: 1px; opacity: 0; }
         #hint {
             position: absolute; bottom: 30px; width: 100%; text-align: center;
-            color: rgba(255,255,255,0.5); font-family: "Microsoft YaHei"; pointer-events: none;
+            color: rgba(255,255,255,0.4); font-family: "Microsoft YaHei"; pointer-events: none;
         }
+        #input-video { position: absolute; width: 1px; height: 1px; opacity: 0; }
     </style>
 </head>
 <body>
 
-<div id="loading">✨ 正在召唤粒子魔法...<br>(首次加载需约5-10秒)</div>
-<div id="hint">请对着摄像头张开/握紧手掌</div>
+<div id="loading">🎂 正在准备惊喜...<br>(加载失败请点击屏幕直接开启)</div>
+<div id="hint">手掌张开触发蛋糕 | 点击屏幕熄灭蜡烛</div>
 <video id="input-video"></video>
 <div id="canvas-container"></div>
 
@@ -33,143 +32,136 @@
 
 <script>
     let scene, camera, renderer, points, geometry;
-    const particleCount = 25000;
-    const videoElement = document.getElementById('input-video');
-    let targetPositions = [];
-    let isExploded = false;
+    const particleCount = 20000;
+    let cakePositions = [], textPositions = [];
+    let state = 'random'; // random, cake, text
 
-    // 1. 初始化场景
     function init() {
         scene = new THREE.Scene();
         camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 1, 2000);
-        camera.position.z = 400;
+        camera.position.z = 500;
 
         renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setPixelRatio(window.devicePixelRatio);
         document.getElementById('canvas-container').appendChild(renderer.domElement);
 
-        // 创建粒子
         geometry = new THREE.BufferGeometry();
         const positions = new Float32Array(particleCount * 3);
         const colors = new Float32Array(particleCount * 3);
 
         for(let i=0; i<particleCount; i++) {
-            positions[i*3] = (Math.random() - 0.5) * 600;
-            positions[i*3+1] = (Math.random() - 0.5) * 600;
-            positions[i*3+2] = (Math.random() - 0.5) * 600;
-
-            colors[i*3] = 0.4; 
-            colors[i*3+1] = 0.8; 
-            colors[i*3+2] = 1.0; 
+            positions[i*3] = (Math.random() - 0.5) * 1000;
+            positions[i*3+1] = (Math.random() - 0.5) * 1000;
+            positions[i*3+2] = (Math.random() - 0.5) * 1000;
+            colors[i*3] = 1; colors[i*3+1] = 0.8; colors[i*3+2] = 0.9;
         }
 
         geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
         geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
-        const material = new THREE.PointsMaterial({
-            size: 1.8,
-            vertexColors: true,
-            blending: THREE.AdditiveBlending,
-            transparent: true,
-            opacity: 0.7
-        });
-
-        points = new THREE.Points(geometry, material);
+        points = new THREE.Points(geometry, new THREE.PointsMaterial({
+            size: 2, vertexColors: true, blending: THREE.AdditiveBlending, transparent: true, opacity: 0.8
+        }));
         scene.add(points);
         
+        createCakeCoords();
         createTextCoords();
         animate();
     }
 
-    // 2. 将文案转为坐标
-    function createTextCoords() {
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        canvas.width = 1200; canvas.height = 300;
-        ctx.fillStyle = "white";
-        ctx.font = "bold 70px Microsoft YaHei";
-        ctx.textAlign = "center";
-        ctx.fillText("祝愿管老师天天开心，生日快乐！", 600, 150);
-
-        const imgData = ctx.getImageData(0,0,1200,300).data;
-        const validCoords = [];
-        for(let y=0; y<300; y+=2) {
-            for(let x=0; x<1200; x+=2) {
-                if(imgData[(y*1200+x)*4] > 128) {
-                    validCoords.push((x-600)*0.8, (150-y)*0.8, 0);
-                }
-            }
-        }
+    // 生成双层蛋糕坐标
+    function createCakeCoords() {
         for(let i=0; i<particleCount; i++) {
-            const idx = (i % (validCoords.length/3)) * 3;
-            targetPositions.push(validCoords[idx], validCoords[idx+1], validCoords[idx+2]);
+            let x, y, z;
+            const r = Math.random();
+            if(r < 0.4) { // 底层
+                const angle = Math.random() * Math.PI * 2;
+                const radius = Math.random() * 120;
+                x = Math.cos(angle) * radius;
+                y = Math.random() * 60 - 100;
+                z = Math.sin(angle) * radius;
+            } else if (r < 0.7) { // 第二层
+                const angle = Math.random() * Math.PI * 2;
+                const radius = Math.random() * 80;
+                x = Math.cos(angle) * radius;
+                y = Math.random() * 50 - 40;
+                z = Math.sin(angle) * radius;
+            } else if (r < 0.95) { // 蜡烛
+                x = (Math.random() - 0.5) * 10;
+                y = Math.random() * 40 + 10;
+                z = (Math.random() - 0.5) * 10;
+            } else { // 火苗
+                x = (Math.random() - 0.5) * 5;
+                y = Math.random() * 15 + 50;
+                z = (Math.random() - 0.5) * 5;
+            }
+            cakePositions.push(x, y, z);
         }
     }
 
-    // 3. 手势处理
-    const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
-    hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.6 });
-    hands.onResults(results => {
-        document.getElementById('loading').style.display = 'none';
-        if(results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-            const hl = results.multiHandLandmarks[0];
-            const dist = Math.hypot(hl[8].x - hl[4].x, hl[8].y - hl[4].y);
-            
-            // 粒子根据手势张合产生呼吸感
-            const s = 1 + dist * 2;
-            points.scale.set(s, s, s);
-
-            // 当手掌张开很大，触发重组
-            if(dist > 0.25 && !isExploded) {
-                isExploded = true;
-                morphToText();
-            }
+    function createTextCoords() {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = 1000; canvas.height = 200;
+        ctx.fillStyle = "white";
+        ctx.font = "bold 60px Arial";
+        ctx.textAlign = "center";
+        ctx.fillText("祝管老师生日快乐！", 500, 100);
+        const data = ctx.getImageData(0,0,1000,200).data;
+        const pts = [];
+        for(let y=0; y<200; y+=2) for(let x=0; x<1000; x+=2) {
+            if(data[(y*1000+x)*4] > 128) pts.push((x-500), (100-y), 0);
         }
-    });
+        for(let i=0; i<particleCount; i++) {
+            const idx = (i % (pts.length/3)) * 3;
+            textPositions.push(pts[idx], pts[idx+1], pts[idx+2]);
+        }
+    }
 
-    function morphToText() {
+    function morph(targetArr) {
         const pos = geometry.attributes.position;
         for(let i=0; i<particleCount; i++) {
             gsap.to(pos.array, {
-                [i*3]: targetPositions[i*3],
-                [i*3+1]: targetPositions[i*3+1],
-                [i*3+2]: targetPositions[i*3+2],
-                duration: 2,
-                ease: "power3.inOut",
-                delay: Math.random() * 0.5,
+                [i*3]: targetArr[i*3], [i*3+1]: targetArr[i*3+1], [i*3+2]: targetArr[i*3+2],
+                duration: 2, ease: "power2.inOut", delay: Math.random() * 0.5,
                 onUpdate: () => pos.needsUpdate = true
             });
         }
     }
 
+    // 交互逻辑
+    window.addEventListener('click', () => {
+        document.getElementById('loading').style.display = 'none';
+        if(state === 'random') {
+            morph(cakePositions); state = 'cake';
+        } else if(state === 'cake') {
+            morph(textPositions); state = 'text';
+        }
+    });
+
+    const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
+    hands.setOptions({ maxNumHands: 1, minDetectionConfidence: 0.6 });
+    hands.onResults(results => {
+        document.getElementById('loading').style.display = 'none';
+        if(results.multiHandLandmarks?.length > 0) {
+            const hl = results.multiHandLandmarks[0];
+            const dist = Math.hypot(hl[8].x - hl[4].x, hl[8].y - hl[4].y);
+            if(dist > 0.25 && state === 'random') { morph(cakePositions); state = 'cake'; }
+        }
+    });
+
     function animate() {
         requestAnimationFrame(animate);
-        points.rotation.y += 0.001;
-        // 背景微弱闪烁效果
-        points.material.size = 1.5 + Math.sin(Date.now()*0.003)*0.5;
+        points.rotation.y += 0.002;
         renderer.render(scene, camera);
     }
 
-    const cameraHelper = new Camera(videoElement, {
-        onFrame: async () => { await hands.send({image: videoElement}); },
+    new Camera(document.getElementById('input-video'), {
+        onFrame: async () => { await hands.send({image: document.getElementById('input-video')}); },
         width: 640, height: 480
-    });
-    cameraHelper.start();
-    init();
+    }).start();
 
-window.addEventListener('click', () => {
-    if(!isExploded) {
-        document.getElementById('loading').style.display = 'none';
-        isExploded = true;
-        morphToText(); // 强制让粒子汇聚成祝福语
-    }
-});
-    window.addEventListener('resize', () => {
-        camera.aspect = window.innerWidth/window.innerHeight;
-        camera.updateProjectionMatrix();
-        renderer.setSize(window.innerWidth, window.innerHeight);
-    });
+    init();
 </script>
 </body>
 </html>
