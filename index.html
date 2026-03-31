@@ -158,6 +158,13 @@
     cameraHelper.start();
     init();
 
+window.addEventListener('click', () => {
+    if(!isExploded) {
+        document.getElementById('loading').style.display = 'none';
+        isExploded = true;
+        morphToText(); // 强制让粒子汇聚成祝福语
+    }
+});
     window.addEventListener('resize', () => {
         camera.aspect = window.innerWidth/window.innerHeight;
         camera.updateProjectionMatrix();
