@@ -3,29 +3,33 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>管老师生日快乐 - 3D魔法</title>
+    <title>管老师生日快乐 - 魔法全开版</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #000; touch-action: none; -webkit-tap-highlight-color: transparent; }
-        #loading-screen {
+        body { margin: 0; overflow: hidden; background: #000; touch-action: none; font-family: sans-serif; }
+        #overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: #000; display: flex; flex-direction: column;
-            justify-content: center; align-items: center; z-index: 1000;
-            transition: opacity 0.5s;
+            background: rgba(0,0,0,0.9); display: flex; flex-direction: column;
+            justify-content: center; align-items: center; z-index: 2000; color: #ff99cc;
+            cursor: pointer; transition: opacity 0.5s;
         }
-        #status-text { color: #ff99cc; margin-top: 20px; font-family: "Microsoft YaHei", sans-serif; text-align: center; font-size: 14px; padding: 0 20px; }
-        #hint { position: absolute; bottom: 30px; width: 100%; text-align: center; color: rgba(255,255,255,0.4); font-family: "Microsoft YaHei"; z-index: 50; pointer-events: none; }
-        #input-video { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+        .btn {
+            padding: 15px 40px; border: 2px solid #ff99cc; border-radius: 30px;
+            font-size: 18px; margin-top: 20px; box-shadow: 0 0 15px rgba(255,153,204,0.4);
+        }
+        #hint { position: absolute; bottom: 30px; width: 100%; text-align: center; color: rgba(255,255,255,0.4); font-size: 14px; pointer-events: none; }
+        #input-video { position: absolute; width: 1px; height: 1px; opacity: 0; }
     </style>
 </head>
 <body>
 
-<div id="loading-screen" onclick="startMagic()">
-    <div style="border: 3px solid #333; border-top: 3px solid #ff99cc; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite;"></div>
-    <div id="status-text">✨ 魔法校准完毕<br>点击屏幕【开启惊喜】</div>
+<div id="overlay" onclick="initAll()">
+    <div style="font-size: 40px;">🎂</div>
+    <div style="margin-top: 15px;">管老师的生日魔法</div>
+    <div class="btn">点击开启手势感应</div>
+    <div style="font-size: 12px; margin-top: 20px; color: #666;">（需授权摄像头以支持手势操控）</div>
 </div>
-<style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
 
-<div id="hint">点点屏幕 或 挥挥手掌</div>
+<div id="hint">手掌张开触发魔法 | 或点击屏幕</div>
 <video id="input-video" playsinline muted autoplay></video>
 
 <script src="https://cdn.staticfile.org/three.js/r128/three.min.js"></script>
@@ -35,25 +39,26 @@
 
 <script>
     let scene, camera, renderer, points, geometry;
-    const particleCount = 20000; 
-    let stateIndex = 0; 
+    const particleCount = 20000;
+    let stateIndex = 0;
+    let isCoolDown = false;
     const states = [{pos:[], col:[]}, {pos:[], col:[]}, {pos:[], col:[]}, {pos:[], col:[]}];
-    let gestureActive = false;
 
-    // 开启体验
-    function startMagic() {
-        document.getElementById('loading-screen').style.opacity = '0';
-        setTimeout(() => document.getElementById('loading-screen').style.display = 'none', 500);
+    // --- 核心：用户触发初始化 ---
+    async function initAll() {
+        document.getElementById('overlay').style.opacity = '0';
+        setTimeout(() => document.getElementById('overlay').style.display = 'none', 500);
+
+        // 1. 初始化 3D 场景
+        initThree();
         
-        // 尝试激活相机和手势
-        if (typeof Hands !== 'undefined') {
-            initGesture();
-        }
+        // 2. 启动相机和手势
+        startGesture();
     }
 
-    async function init() {
+    function initThree() {
         scene = new THREE.Scene();
-        camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 1, 2000);
+        camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 1, 2000);
         camera.position.z = 500;
 
         renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -62,20 +67,18 @@
         document.body.appendChild(renderer.domElement);
 
         geometry = new THREE.BufferGeometry();
-        
-        // 静态数据立即生成
-        createStarData(0); 
-        createDoubleCakeData(1);   
-        await loadPerson34(2); 
-        createGradientText(3);   
+        createStarData(0);
+        createLuxCakeData(1);
+        loadPerson34(2);
+        createGradientText(3);
 
-        const initialPos = new Float32Array(states[0].pos);
-        const initialCol = new Float32Array(states[0].col);
-        geometry.setAttribute('position', new THREE.BufferAttribute(initialPos, 3));
-        geometry.setAttribute('color', new THREE.BufferAttribute(initialCol, 3));
+        const pos = new Float32Array(states[0].pos);
+        const col = new Float32Array(states[0].col);
+        geometry.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+        geometry.setAttribute('color', new THREE.BufferAttribute(col, 3));
 
         points = new THREE.Points(geometry, new THREE.PointsMaterial({
-            size: 2.3, vertexColors: true, transparent: true, blending: THREE.AdditiveBlending
+            size: 2.2, vertexColors: true, transparent: true, blending: THREE.AdditiveBlending
         }));
         scene.add(points);
 
@@ -90,88 +93,84 @@
         }
     }
 
-    function createDoubleCakeData(idx) {
+    function createLuxCakeData(idx) {
         for(let i=0; i<particleCount; i++) {
             let x,y,z, r,g,b; const rand = Math.random();
-            if(rand < 0.4) { 
-                const a = Math.random()*Math.PI*2; const rad = Math.random()*115;
+            if(rand < 0.4) { // 奶油底层
+                const a = Math.random()*Math.PI*2; const rad = Math.random()*120;
                 x = Math.cos(a)*rad; y = Math.random()*50-100; z = Math.sin(a)*rad;
                 r=0.98; g=0.95; b=0.98;
-            } else if(rand < 0.7) { 
-                const a = Math.random()*Math.PI*2; const rad = Math.random()*80;
+            } else if(rand < 0.7) { // 粉色层
+                const a = Math.random()*Math.PI*2; const rad = Math.random()*85;
                 x = Math.cos(a)*rad; y = Math.random()*45-45; z = Math.sin(a)*rad;
                 r=1; g=0.7; b=0.8;
-            } else { 
-                x = (Math.random()-0.5)*12; y = Math.random()*85; z = (Math.random()-0.5)*12;
+            } else { // 蜡烛与火苗
+                x = (Math.random()-0.5)*12; y = Math.random()*80; z = (Math.random()-0.5)*12;
                 r=1; g=0.6; b=0.2;
             }
             states[idx].pos.push(x, y, z); states[idx].col.push(r, g, b);
         }
     }
 
-    // 强制 3:4 裁切与显示
-    function loadPerson34(idx) {
-        return new Promise((resolve) => {
-            const img = new Image();
-            img.crossOrigin = "Anonymous"; 
-            img.src = "person.jpg?v=" + Date.now();
-            img.onload = () => {
-                const canvas = document.createElement('canvas');
-                const ctx = canvas.getContext('2d');
-                canvas.width = 150; canvas.height = 200; 
-                let iw = img.width, ih = img.height;
-                let cw = iw, ch = ih;
-                if (iw / ih > 0.75) { cw = ih * 0.75; } else { ch = iw / 0.75; }
-                ctx.drawImage(img, (iw-cw)/2, (ih-ch)/2, cw, ch, 0, 0, 150, 200);
-                const data = ctx.getImageData(0, 0, 150, 200).data;
-                const temp = [];
-                const scale = 2.8; 
-                for (let y = 0; y < 200; y++) {
-                    for (let x = 0; x < 150; x++) {
-                        const i = (y * 150 + x) * 4;
-                        if (data[i+3] > 60) {
-                            temp.push({x: (x-75)*scale, y:(100-y)*scale-30, r:data[i]/255, g:data[i+1]/255, b:data[i+2]/255});
-                        }
+    async function loadPerson34(idx) {
+        const img = new Image();
+        img.crossOrigin = "Anonymous";
+        img.src = "person.jpg?v=" + Date.now();
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = 180; canvas.height = 240; // 强制 3:4 采样
+            let iw = img.width, ih = img.height;
+            let cw = iw, ch = iw * (4/3);
+            if(ch > ih) { ch = ih; cw = ch * (3/4); }
+            ctx.drawImage(img, (iw-cw)/2, (ih-ch)/2, cw, ch, 0, 0, 180, 240);
+            const data = ctx.getImageData(0, 0, 180, 240).data;
+            const temp = [];
+            const scale = 2.8;
+            for (let y = 0; y < 240; y++) {
+                for (let x = 0; x < 180; x++) {
+                    const i = (y * 180 + x) * 4;
+                    if (data[i + 3] > 60) {
+                        temp.push({x:(x-90)*scale, y:(120-y)*scale-20, r:data[i]/255, g:data[i+1]/255, b:data[i+2]/255});
                     }
                 }
-                for (let i = 0; i < particleCount; i++) {
-                    const p = temp[i % temp.length];
-                    states[idx].pos.push(p.x, p.y, (Math.random()-0.5)*10);
-                    states[idx].col.push(p.r, p.g, p.b);
-                }
-                resolve();
-            };
-            img.onerror = () => { createStarData(idx); resolve(); };
-        });
+            }
+            for (let i = 0; i < particleCount; i++) {
+                const p = temp[i % temp.length];
+                states[idx].pos.push(p.x, p.y, (Math.random()-0.5)*8);
+                states[idx].col.push(p.r, p.g, p.b);
+            }
+        };
     }
 
     function createGradientText(idx) {
         const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d');
-        canvas.width = 600; canvas.height = 200;
+        canvas.width = 800; canvas.height = 200;
         ctx.fillStyle = "white"; ctx.font = "bold 60px Arial"; ctx.textAlign = "center";
-        ctx.fillText("管老师，生日快乐", 300, 110);
-        const data = ctx.getImageData(0,0,600,200).data;
+        ctx.fillText("管老师，生日快乐", 400, 110);
+        const data = ctx.getImageData(0,0,800,200).data;
         const pts = [];
-        for(let y=0; y<200; y+=2) for(let x=0; x<600; x+=2) {
-            if(data[(y*600+x)*4] > 120) pts.push({x: x-300, y: 100-y});
+        for(let y=0; y<200; y+=2) for(let x=0; x<800; x+=2) {
+            if(data[(y*800+x)*4] > 120) pts.push({x: x-400, y: 100-y});
         }
         for(let i=0; i<particleCount; i++) {
             const p = pts[i % pts.length];
             states[idx].pos.push(p.x * 1.3, p.y * 1.3, 0);
-            const ratio = (p.x + 250) / 500;
-            states[idx].col.push(0.4 + ratio * 0.6, 0.6, 0.9 - ratio * 0.2); 
+            const mix = (p.x + 300) / 600;
+            states[idx].col.push(0.4 + mix * 0.6, 0.6, 0.95 - mix * 0.2);
         }
     }
 
     function nextStep() {
         stateIndex = (stateIndex + 1) % 4;
         const target = states[stateIndex];
+        if(!target.pos.length) return;
         const posAttr = geometry.attributes.position;
         const colAttr = geometry.attributes.color;
         for(let i=0; i<particleCount; i++) {
             gsap.to(posAttr.array, {
                 [i*3]: target.pos[i*3], [i*3+1]: target.pos[i*3+1], [i*3+2]: target.pos[i*3+2],
-                duration: 2, ease: "power3.inOut", delay: Math.random()*0.3,
+                duration: 2, ease: "power2.inOut", delay: Math.random()*0.3,
                 onUpdate: () => posAttr.needsUpdate = true
             });
             gsap.to(colAttr.array, {
@@ -181,32 +180,35 @@
         }
     }
 
-    // 重点：全兼容手势逻辑
-    function initGesture() {
-        try {
-            const video = document.getElementById('input-video');
-            const hands = new Hands({locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`});
-            hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.6 });
-            
-            hands.onResults(res => {
-                if(res.multiHandLandmarks?.length > 0) {
-                    const hl = res.multiHandLandmarks[0];
-                    // 计算中指尖到掌心的垂直距离
-                    const dy = hl[0].y - hl[12].y; 
-                    if(dy > 0.3 && !gestureActive) {
-                        gestureActive = true; 
-                        nextStep(); 
-                        setTimeout(() => gestureActive = false, 3000);
-                    }
-                }
-            });
+    function startGesture() {
+        const video = document.getElementById('input-video');
+        const hands = new Hands({locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`});
+        hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.6 });
+        
+        hands.onResults(res => {
+            if(res.multiHandLandmarks?.length > 0) {
+                const hl = res.multiHandLandmarks[0];
+                // 判定：五个手指尖到掌心(0)的平均距离是否足够远（即张开手掌）
+                const fingertips = [4, 8, 12, 16, 20];
+                let avgDist = 0;
+                fingertips.forEach(i => {
+                    avgDist += Math.hypot(hl[i].x - hl[0].x, hl[i].y - hl[0].y);
+                });
+                avgDist /= 5;
 
-            const cam = new Camera(video, {
-                onFrame: async () => { await hands.send({image: video}); },
-                width: 640, height: 480
-            });
-            cam.start();
-        } catch(e) { console.warn("摄像头启动失败，仅支持点击模式"); }
+                if(avgDist > 0.45 && !isCoolDown) {
+                    isCoolDown = true;
+                    nextStep();
+                    setTimeout(() => isCoolDown = false, 3000);
+                }
+            }
+        });
+
+        const cam = new Camera(video, {
+            onFrame: async () => { await hands.send({image: video}); },
+            width: 640, height: 480
+        });
+        cam.start();
     }
 
     function animate() {
@@ -214,8 +216,6 @@
         points.rotation.y += 0.001;
         renderer.render(scene, camera);
     }
-
-    init();
 </script>
 </body>
 </html>
