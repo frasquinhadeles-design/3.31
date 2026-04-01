@@ -10,17 +10,18 @@
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: #000; display: flex; flex-direction: column;
             justify-content: center; align-items: center; z-index: 1000;
+            transition: opacity 0.8s;
         }
         #status-text { color: #ff99cc; margin-top: 20px; font-family: "Microsoft YaHei", sans-serif; text-align: center; font-size: 14px; }
-        #hint { position: absolute; bottom: 30px; width: 100%; text-align: center; color: rgba(255,255,255,0.3); font-family: "Microsoft YaHei"; z-index: 50; pointer-events: none; }
+        #hint { position: absolute; bottom: 30px; width: 100%; text-align: center; color: rgba(255,255,255,0.4); font-family: "Microsoft YaHei"; z-index: 50; pointer-events: none; }
         #input-video { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
     </style>
 </head>
 <body>
 
-<div id="loading-screen" onclick="forceHide()">
+<div id="loading-screen" onclick="this.style.opacity=0;setTimeout(()=>this.remove(),800)">
     <div style="border: 3px solid #333; border-top: 3px solid #ff99cc; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite;"></div>
-    <div id="status-text">✨ 正在点燃星空...<br>若长时间未进入，请点击屏幕</div>
+    <div id="status-text">✨ 魔法仪式准备中...<br>若长时间未进入，请点击屏幕</div>
 </div>
 <style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
 
@@ -34,79 +35,111 @@
 
 <script>
     let scene, camera, renderer, points, geometry;
-    const particleCount = 18000; 
+    const particleCount = 20000; 
     let stateIndex = 0; 
     const states = [{pos:[], col:[]}, {pos:[], col:[]}, {pos:[], col:[]}, {pos:[], col:[]}];
 
-    function forceHide() {
-        const ls = document.getElementById('loading-screen');
-        if(ls) ls.style.display = 'none';
+    async function init() {
+        scene = new THREE.Scene();
+        camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 1, 2000);
+        camera.position.z = 500;
+
+        renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        document.body.appendChild(renderer.domElement);
+
+        geometry = new THREE.BufferGeometry();
+        const initialPos = new Float32Array(particleCount * 3);
+        const initialCol = new Float32Array(particleCount * 3);
+
+        // 预生成静态数据
+        createStarData(0); 
+        createLuxCakeData(1);   
+        createGradientText(3);   
+        
+        // 异步加载图片，防止阻塞初始化
+        loadPerson34(2);
+
+        for(let i=0; i<particleCount; i++) {
+            initialPos[i*3] = states[0].pos[i*3];
+            initialPos[i*3+1] = states[0].pos[i*3+1];
+            initialPos[i*3+2] = states[0].pos[i*3+2];
+            initialCol[i*3] = states[0].col[i*3];
+            initialCol[i*3+1] = states[0].col[i*3+1];
+            initialCol[i*3+2] = states[0].col[i*3+2];
+        }
+
+        geometry.setAttribute('position', new THREE.BufferAttribute(initialPos, 3));
+        geometry.setAttribute('color', new THREE.BufferAttribute(initialCol, 3));
+
+        points = new THREE.Points(geometry, new THREE.PointsMaterial({
+            size: 2.2, vertexColors: true, transparent: true, blending: THREE.AdditiveBlending
+        }));
+        scene.add(points);
+
+        setupInteraction();
+        animate();
+        
+        // 5秒强制关闭加载
+        setTimeout(() => {
+            const ls = document.getElementById('loading-screen');
+            if(ls) { ls.style.opacity = 0; setTimeout(()=>ls.remove(), 800); }
+        }, 5000);
     }
 
-    // 1. 先把能生成的静态数据生成
+    // 0. 星空
     function createStarData(idx) {
         for(let i=0; i<particleCount; i++) {
             states[idx].pos.push((Math.random()-0.5)*1000, (Math.random()-0.5)*1000, (Math.random()-0.5)*1000);
-            states[idx].col.push(0.5, 0.7, 1);
+            states[idx].col.push(0.4, 0.7, 1);
         }
     }
 
-    function createCakeData(idx) {
+    // 1. 豪华双层蛋糕 (带奶油花边和动感火苗)
+    function createLuxCakeData(idx) {
         for(let i=0; i<particleCount; i++) {
             let x,y,z, r,g,b; const rand = Math.random();
-            if(rand < 0.4) { 
-                const a = Math.random()*Math.PI*2; const rad = Math.random()*110;
+            if(rand < 0.4) { // 底层 (奶油白)
+                const a = Math.random()*Math.PI*2; const rad = Math.random()*120;
                 x = Math.cos(a)*rad; y = Math.random()*50-100; z = Math.sin(a)*rad;
-                r=0.98; g=0.95; b=0.98;
-            } else if(rand < 0.7) { 
+                r=0.95; g=0.95; b=0.98;
+            } else if(rand < 0.7) { // 上层 (草莓粉)
                 const a = Math.random()*Math.PI*2; const rad = Math.random()*80;
                 x = Math.cos(a)*rad; y = Math.random()*45-45; z = Math.sin(a)*rad;
-                r=1; g=0.7; b=0.8;
-            } else { 
-                x = (Math.random()-0.5)*12; y = Math.random()*80; z = (Math.random()-0.5)*12;
-                r=1; g=0.9; b=0.4;
+                r=1; g=0.75; b=0.85;
+            } else if(rand < 0.95) { // 蜡烛 (金色)
+                x = (Math.random()-0.5)*12; y = Math.random()*70+15; z = (Math.random()-0.5)*12;
+                r=1; g=0.85; b=0.3;
+            } else { // 火苗 (橙红)
+                x = (Math.random()-0.5)*8; y = Math.random()*20+85; z = (Math.random()-0.5)*8;
+                r=1; g=0.4; b=0.2;
             }
-            states[idx].pos.push(x, y, z); states[idx].col.push(r, g, b);
+            states[idx].pos.push(x, y, z);
+            states[idx].col.push(r, g, b);
         }
     }
 
-    function createTextData(idx) {
-        const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d');
-        canvas.width = 1000; canvas.height = 200;
-        ctx.fillStyle = "white"; ctx.font = "bold 65px Arial"; ctx.textAlign = "center";
-        ctx.fillText("管老师，生日快乐", 500, 110);
-        const data = ctx.getImageData(0,0,1000,200).data;
-        const pts = [];
-        for(let y=0; y<200; y+=2.5) for(let x=0; x<1000; x+=2.5) {
-            if(data[(y*1000+x)*4] > 120) pts.push({x: x-500, y: 100-y});
-        }
-        for(let i=0; i<particleCount; i++) {
-            const p = pts[i % pts.length];
-            states[idx].pos.push(p.x, p.y, 0);
-            const mix = (p.x + 400) / 800;
-            states[idx].col.push(0.5 + mix * 0.5, 0.6, 0.95 - mix * 0.3); 
-        }
-    }
-
-    // 2. 异步加载图片（不阻塞主流程）
-    function loadPersonImage(idx) {
+    // 2. 3:4 竖版人物裁切
+    function loadPerson34(idx) {
         const img = new Image();
-        img.crossOrigin = "Anonymous";
+        img.crossOrigin = "Anonymous"; 
         img.src = "person.jpg?v=" + Math.random();
         img.onload = () => {
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
-            canvas.width = 180; canvas.height = 240;
+            const tw = 180, th = 240; // 3:4
+            canvas.width = tw; canvas.height = th;
             let cropW = img.width, cropH = img.width * (4/3);
             if(cropH > img.height) { cropH = img.height; cropW = cropH * (3/4); }
-            ctx.drawImage(img, (img.width-cropW)/2, (img.height-cropH)/2, cropW, cropH, 0, 0, 180, 240);
-            const data = ctx.getImageData(0, 0, 180, 240).data;
+            ctx.drawImage(img, (img.width-cropW)/2, (img.height-cropH)/2, cropW, cropH, 0, 0, tw, th);
+            const data = ctx.getImageData(0, 0, tw, th).data;
             const temp = [];
-            for (let y = 0; y < 240; y++) {
-                for (let x = 0; x < 180; x++) {
-                    const i = (y * 180 + x) * 4;
-                    if (data[i + 3] > 60) {
-                        temp.push({x:(x-90)*2.8, y:(120-y)*2.8-20, r:data[i]/255, g:data[i+1]/255, b:data[i+2]/255});
+            for (let y = 0; y < th; y++) {
+                for (let x = 0; x < tw; x++) {
+                    const i = (y * tw + x) * 4;
+                    if (data[i + 3] > 70) {
+                        temp.push({x:(x-tw/2)*2.8, y:(th/2-y)*2.8-20, r:data[i]/255, g:data[i+1]/255, b:data[i+2]/255});
                     }
                 }
             }
@@ -115,89 +148,87 @@
                 states[idx].pos.push(p.x, p.y, (Math.random()-0.5)*10);
                 states[idx].col.push(p.r, p.g, p.b);
             }
-            console.log("图片粒子化完成");
         };
         img.onerror = () => { createStarData(idx); };
     }
 
-    // 3. 初始化渲染
-    function init() {
-        scene = new THREE.Scene();
-        camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 1, 2000);
-        camera.position.z = 500;
-        renderer = new THREE.WebGLRenderer({ antialias: true });
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        document.body.appendChild(renderer.domElement);
-
-        geometry = new THREE.BufferGeometry();
-        createStarData(0); 
-        createCakeData(1);
-        loadPersonImage(2); // 异步加载，不影响 init 运行
-        createTextData(3);
-
-        const pos = new Float32Array(states[0].pos);
-        const col = new Float32Array(states[0].col);
-        geometry.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-        geometry.setAttribute('color', new THREE.BufferAttribute(col, 3));
-
-        points = new THREE.Points(geometry, new THREE.PointsMaterial({
-            size: 2.5, vertexColors: true, transparent: true, blending: THREE.AdditiveBlending
-        }));
-        scene.add(points);
-
-        // 启动交互
-        setupEvents();
-        animate();
-        
-        // 5秒后强制关闭加载层（如果还没自动关闭）
-        setTimeout(forceHide, 5000);
-    }
-
-    function setupEvents() {
-        window.addEventListener('click', () => { forceHide(); nextStep(); });
-
-        // 手势识别
-        const hands = new Hands({locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`});
-        hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.6 });
-        hands.onResults(res => {
-            forceHide();
-            if(res.multiHandLandmarks?.length > 0) {
-                const hl = res.multiHandLandmarks[0];
-                if(Math.hypot(hl[8].x - hl[4].x, hl[8].y - hl[4].y) > 0.3 && !window.isT) {
-                    window.isT = true; nextStep(); setTimeout(() => window.isT = false, 3000);
-                }
-            }
-        });
-        const cam = new Camera(document.getElementById('input-video'), {
-            onFrame: async () => { try { await hands.send({image: document.getElementById('input-video')}); } catch(e){} },
-            width: 640, height: 480
-        });
-        cam.start().catch(e => console.log("相机启动失败，点击模式可用"));
+    // 3. 蓝粉渐变文字
+    function createGradientText(idx) {
+        const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d');
+        canvas.width = 1000; canvas.height = 200;
+        ctx.fillStyle = "white"; ctx.font = "bold 60px Arial"; ctx.textAlign = "center";
+        ctx.fillText("管老师，生日快乐", 500, 110);
+        const data = ctx.getImageData(0,0,1000,200).data;
+        const pts = [];
+        for(let y=0; y<200; y+=2.5) for(let x=0; x<1000; x+=2.5) {
+            if(data[(y*1000+x)*4] > 120) pts.push({x: x-500, y: 100-y});
+        }
+        for(let i=0; i<particleCount; i++) {
+            const p = pts[i % pts.length];
+            states[idx].pos.push(p.x * 1.1, p.y * 1.1, 0);
+            const mix = (p.x + 400) / 800; // 渐变系数
+            states[idx].col.push(0.5 + mix*0.5, 0.7, 0.9 - mix*0.2); // 蓝粉过渡
+        }
     }
 
     function nextStep() {
         stateIndex = (stateIndex + 1) % 4;
         const target = states[stateIndex];
-        if(!target.pos.length) return; // 如果图片还没加载完，先不跳
+        if(!target.pos.length) return; 
 
         const posAttr = geometry.attributes.position;
         const colAttr = geometry.attributes.color;
         for(let i=0; i<particleCount; i++) {
             gsap.to(posAttr.array, {
                 [i*3]: target.pos[i*3], [i*3+1]: target.pos[i*3+1], [i*3+2]: target.pos[i*3+2],
-                duration: 2, ease: "power2.inOut", delay: Math.random()*0.3,
+                duration: 2, ease: "power2.inOut", delay: Math.random()*0.35,
                 onUpdate: () => posAttr.needsUpdate = true
             });
             gsap.to(colAttr.array, {
                 [i*3]: target.col[i*3], [i*3+1]: target.col[i*3+1], [i*3+2]: target.col[i*3+2],
-                duration: 1.5, onUpdate: () => colAttr.needsUpdate = true
+                duration: 1.6, onUpdate: () => colAttr.needsUpdate = true
             });
         }
+    }
+
+    function setupInteraction() {
+        window.addEventListener('click', () => { 
+            const ls = document.getElementById('loading-screen');
+            if(ls) { ls.style.opacity = 0; setTimeout(()=>ls.remove(), 800); }
+            nextStep(); 
+        });
+
+        // 异步初始化手势，防止库加载错误拖垮主程序
+        try {
+            const hands = new Hands({locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`});
+            hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.6 });
+            hands.onResults(res => {
+                const ls = document.getElementById('loading-screen');
+                if(ls) { ls.style.opacity = 0; setTimeout(()=>ls.remove(), 800); }
+                if(res.multiHandLandmarks?.length > 0) {
+                    const hl = res.multiHandLandmarks[0];
+                    if(Math.hypot(hl[8].x - hl[4].x, hl[8].y - hl[4].y) > 0.3 && !window.isT) {
+                        window.isT = true; nextStep(); setTimeout(() => window.isT = false, 3000);
+                    }
+                }
+            });
+            const cam = new Camera(document.getElementById('input-video'), {
+                onFrame: async () => { await hands.send({image: document.getElementById('input-video')}); },
+                width: 640, height: 480
+            });
+            cam.start().catch(()=>{});
+        } catch(e) {}
     }
 
     function animate() {
         requestAnimationFrame(animate);
         points.rotation.y += 0.001;
+        // 火苗动态晃动
+        if(stateIndex === 1) {
+            points.position.y = Math.sin(Date.now()*0.01)*3;
+        } else {
+            points.position.y = 0;
+        }
         renderer.render(scene, camera);
     }
 
