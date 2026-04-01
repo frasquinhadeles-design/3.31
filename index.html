@@ -35,7 +35,6 @@
     const particleCount = 15000; 
     let stateIndex = 0; // 0:星空, 1:蛋糕, 2:人物, 3:祝福语
     
-    // 数据容器
     const states = [
         { pos: [], col: [] }, // 星空
         { pos: [], col: [] }, // 蛋糕
@@ -56,13 +55,11 @@
         const initialPos = new Float32Array(particleCount * 3);
         const initialCol = new Float32Array(particleCount * 3);
 
-        // 预生成所有形态数据
         createRandomData(0);
         createCakeData(1);
-        await createPersonData(2); // 处理照片
+        await createPersonData(2); 
         createTextData(3);
 
-        // 初始设为星空
         for(let i=0; i<particleCount; i++) {
             initialPos[i*3] = states[0].pos[i*3];
             initialPos[i*3+1] = states[0].pos[i*3+1];
@@ -84,7 +81,6 @@
         animate();
     }
 
-    // --- 各形态数据生成 ---
     function createRandomData(idx) {
         for(let i=0; i<particleCount; i++) {
             states[idx].pos.push((Math.random()-0.5)*800, (Math.random()-0.5)*800, (Math.random()-0.5)*800);
@@ -95,11 +91,11 @@
     function createCakeData(idx) {
         for(let i=0; i<particleCount; i++) {
             let x,y,z, r,g,b; const rand = Math.random();
-            if(rand < 0.6) { // 糕体
+            if(rand < 0.6) {
                 const a = Math.random()*Math.PI*2; const rad = Math.random()*(rand<0.3?100:70);
                 x = Math.cos(a)*rad; y = rand<0.3? Math.random()*50-80 : Math.random()*40-30; z = Math.sin(a)*rad;
                 r=1; g=0.8; b=0.9;
-            } else { // 蜡烛火苗
+            } else {
                 x = (Math.random()-0.5)*10; y = Math.random()*60+20; z = (Math.random()-0.5)*10;
                 r=1; g=0.9; b=0.3;
             }
@@ -108,7 +104,7 @@
         }
     }
 
-function createPersonData(idx) {
+    function createPersonData(idx) {
         return new Promise((resolve) => {
             const img = new Image();
             img.crossOrigin = "Anonymous"; 
@@ -117,42 +113,27 @@ function createPersonData(idx) {
             img.onload = () => {
                 const canvas = document.createElement('canvas');
                 const ctx = canvas.getContext('2d');
-                
-                // 1. 限制采样精度，防止粒子过多导致手机卡顿
-                const maxSide = 160; 
+                const maxSide = 130; 
                 const ratio = img.width / img.height;
-                let canvasW, canvasH;
-                
-                if (img.width > img.height) {
-                    canvasW = maxSide;
-                    canvasH = maxSide / ratio;
-                } else {
-                    canvasW = maxSide * ratio;
-                    canvasH = maxSide;
-                }
+                let canvasW = img.width > img.height ? maxSide : maxSide * ratio;
+                let canvasH = img.width > img.height ? maxSide / ratio : maxSide;
                 
                 canvas.width = canvasW;
                 canvas.height = canvasH;
                 ctx.drawImage(img, 0, 0, canvasW, canvasH);
-                
                 const imageData = ctx.getImageData(0, 0, canvasW, canvasH).data;
                 const temp = [];
 
-                // 2. 核心算法：自动计算缩放系数和偏移量
-                // 如果图片很长，scale 就要小一些，确保全身都能进屏幕
-                const scale = img.height > img.width ? 1.1 : 1.5; 
-                // 自动计算垂直偏移，将图片中心拉回到屏幕视觉中心
-                const verticalOffset = (canvasH * scale) / 4;
-
+                // 强制中心适配比例
+                const scale = 1.2; 
                 for (let y = 0; y < canvasH; y++) {
                     for (let x = 0; x < canvasW; x++) {
                         const i = (y * canvasW + x) * 4;
-                        if (imageData[i + 3] > 60) { 
+                        if (imageData[i + 3] > 70) { 
                             temp.push({
-                                // 左右居中
                                 x: (x - canvasW / 2) * scale, 
-                                // 上下居中：(一半高度 - 当前y) * 缩放 - 偏移补偿
-                                y: (canvasH / 2 - y) * scale - verticalOffset, 
+                                // 向上偏移 +50 确保底部露出
+                                y: (canvasH / 2 - y) * scale + 50, 
                                 r: imageData[i] / 255, 
                                 g: imageData[i + 1] / 255, 
                                 b: imageData[i + 2] / 255
@@ -166,13 +147,9 @@ function createPersonData(idx) {
                     states[idx].pos.push(p.x, p.y, (Math.random() - 0.5) * 5);
                     states[idx].col.push(p.r, p.g, p.b);
                 }
-                console.log("人物全图适配完成");
                 resolve();
             };
-            img.onerror = () => {
-                createRandomData(idx);
-                resolve();
-            };
+            img.onerror = () => { createRandomData(idx); resolve(); };
         });
     }
 
@@ -193,7 +170,6 @@ function createPersonData(idx) {
         }
     }
 
-    // --- 核心切换逻辑 ---
     function nextStep() {
         stateIndex = (stateIndex + 1) % 4;
         const target = states[stateIndex];
@@ -201,25 +177,20 @@ function createPersonData(idx) {
         const colAttr = geometry.attributes.color;
 
         for(let i=0; i<particleCount; i++) {
-            // 位置平滑移动
             gsap.to(posAttr.array, {
                 [i*3]: target.pos[i*3], [i*3+1]: target.pos[i*3+1], [i*3+2]: target.pos[i*3+2],
-                duration: 1.8, ease: "expo.out", delay: Math.random()*0.3,
+                duration: 2, ease: "expo.out", delay: Math.random()*0.3,
                 onUpdate: () => posAttr.needsUpdate = true
             });
-            // 颜色平滑过渡
             gsap.to(colAttr.array, {
                 [i*3]: target.col[i*3], [i*3+1]: target.col[i*3+1], [i*3+2]: target.col[i*3+2],
-                duration: 1.2, onUpdate: () => colAttr.needsUpdate = true
+                duration: 1.5, onUpdate: () => colAttr.needsUpdate = true
             });
         }
     }
 
     function setupInteraction() {
-        // 1. 点击交互
         window.addEventListener('click', nextStep);
-
-        // 2. 手势交互
         const hands = new Hands({locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`});
         hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.6 });
         hands.onResults(res => {
@@ -228,7 +199,6 @@ function createPersonData(idx) {
                 const hl = res.multiHandLandmarks[0];
                 const dist = Math.hypot(hl[8].x - hl[4].x, hl[8].y - hl[4].y);
                 if(dist > 0.25) { 
-                    // 增加防抖处理，防止一次张手触发多次切换
                     if(!window.isTransitioning) {
                         window.isTransitioning = true;
                         nextStep();
@@ -237,7 +207,6 @@ function createPersonData(idx) {
                 }
             }
         });
-
         new Camera(document.getElementById('input-video'), {
             onFrame: async () => { await hands.send({image: document.getElementById('input-video')}); },
             width: 640, height: 480
@@ -250,81 +219,7 @@ function createPersonData(idx) {
         renderer.render(scene, camera);
     }
 
-    init();// --- 1. 找到这个函数并替换整个函数体 ---
-function createPersonData(idx) {
-    return new Promise((resolve) => {
-        const img = new Image();
-        img.crossOrigin = "Anonymous"; 
-        // 关键：确保这里和你仓库的文件名一模一样
-        img.src = "person.jpg"; 
-
-        img.onload = () => {
-            console.log("人物图片读取成功！");
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
-            const size = 200; // 采样精度
-            canvas.width = size;
-            canvas.height = size;
-            
-            ctx.drawImage(img, 0, 0, size, size);
-            const imageData = ctx.getImageData(0, 0, size, size).data;
-            
-            const temp = [];
-            for (let y = 0; y < size; y++) {
-                for (let x = 0; x < size; x++) {
-                    const i = (y * size + x) * 4;
-                    // 过滤算法：只保留不透明且不是纯黑的像素
-                    if (imageData[i+3] > 120) { 
-                        temp.push({
-                            x: (x - size/2) * 2.2, 
-                            y: (size/2 - y) * 2.2, 
-                            r: imageData[i]/255, 
-                            g: imageData[i+1]/255, 
-                            b: imageData[i+2]/255
-                        });
-                    }
-                }
-            }
-
-            // 将照片像素分配给粒子系统
-            for (let i = 0; i < particleCount; i++) {
-                const p = temp[i % temp.length];
-                states[idx].pos.push(p.x, p.y, (Math.random()-0.5)*15);
-                states[idx].col.push(p.r, p.g, p.b);
-            }
-            resolve();
-        };
-
-        img.onerror = () => {
-            console.error("图片加载失败，请检查文件名");
-            createRandomData(idx); // 兜底：加载失败显示星空
-            resolve();
-        };
-    });
-}
-
-// --- 2. 确保你的切换逻辑如下（控制形态循环） ---
-function nextStep() {
-    // 状态循环：0星空 -> 1蛋糕 -> 2人物 -> 3祝福语
-    stateIndex = (stateIndex + 1) % 4; 
-    const target = states[stateIndex];
-    const posAttr = geometry.attributes.position;
-    const colAttr = geometry.attributes.color;
-
-    for(let i=0; i<particleCount; i++) {
-        // 粒子移动动画
-        gsap.to(posAttr.array, {
-            [i*3]: target.pos[i*3], [i*3+1]: target.pos[i*3+1], [i*3+2]: target.pos[i*3+2],
-            duration: 2, ease: "expo.out", delay: Math.random()*0.3,
-            onUpdate: () => posAttr.needsUpdate = true
-        });
-        // 颜色变换动画
-        gsap.to(colAttr.array, {
-            [i*3]: target.col[i*3], [i*3+1]: target.col[i*3+1], [i*3+2]: target.col[i*3+2],
-            duration: 1.5, onUpdate: () => colAttr.needsUpdate = true
-        });
-    }
-}
+    init();
 </script>
 </body>
 </html>
