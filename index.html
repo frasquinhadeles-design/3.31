@@ -3,13 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>管老师生日快乐 - 3D魔法</title>
+    <title>管老师生日快乐</title>
     <style>
         body { margin: 0; overflow: hidden; background: #000; touch-action: none; }
         #loading-screen {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: #000; display: flex; flex-direction: column;
             justify-content: center; align-items: center; z-index: 1000;
+            transition: opacity 0.5s;
         }
         #status-text { color: #ff99cc; margin-top: 20px; font-family: "Microsoft YaHei", sans-serif; text-align: center; font-size: 14px; line-height: 1.6; }
         #hint { position: absolute; bottom: 30px; width: 100%; text-align: center; color: rgba(255,255,255,0.4); font-family: "Microsoft YaHei"; z-index: 50; pointer-events: none; }
@@ -18,13 +19,13 @@
 </head>
 <body>
 
-<div id="loading-screen">
+<div id="loading-screen" onclick="forceStart()">
     <div style="border: 3px solid #f3f3f3; border-top: 3px solid #ff99cc; border-radius: 50%; width: 35px; height: 35px; animation: spin 1s linear infinite;"></div>
-    <div id="status-text">✨ 正在生成 3:4 高清艺术像...<br>请确保 person.jpg 位于根目录</div>
+    <div id="status-text">✨ 魔法召唤中...<br>若长时间卡住，请点击屏幕跳过</div>
 </div>
 <style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
 
-<div id="hint">张开手掌触发魔法 | 或点击屏幕切换阶段</div>
+<div id="hint">张开手掌触发魔法 | 或点击屏幕切换</div>
 <video id="input-video" playsinline></video>
 
 <script src="https://cdn.staticfile.org/three.js/r128/three.min.js"></script>
@@ -38,10 +39,15 @@
     let stateIndex = 0; 
     const states = [{pos:[], col:[]}, {pos:[], col:[]}, {pos:[], col:[]}, {pos:[], col:[]}];
 
+    // 强制跳过加载层
+    function forceStart() {
+        const ls = document.getElementById('loading-screen');
+        if(ls) { ls.style.opacity = 0; setTimeout(()=>ls.remove(), 500); }
+    }
+
     async function init() {
         scene = new THREE.Scene();
-        const aspect = window.innerWidth / window.innerHeight;
-        camera = new THREE.PerspectiveCamera(60, aspect, 1, 2000);
+        camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 1, 2000);
         camera.position.z = 450;
 
         renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -53,11 +59,20 @@
         const initialPos = new Float32Array(particleCount * 3);
         const initialCol = new Float32Array(particleCount * 3);
 
-        // --- 数据生成流 ---
         createStarData(0); 
         createDoubleCakeData(1);   
-        await createPerson34(2); 
         createGradientText(3);   
+
+        // 尝试加载图片，如果失败或超时则直接进行下一步
+        try {
+            await Promise.race([
+                createPerson34(2),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000))
+            ]);
+        } catch (e) {
+            console.log("图片加载跳过:", e);
+            createStarData(2); // 图片失败时，状态2设为星空
+        }
 
         for(let i=0; i<particleCount; i++) {
             initialPos[i*3] = states[0].pos[i*3];
@@ -81,27 +96,28 @@
     }
 
     function createStarData(idx) {
+        states[idx].pos = []; states[idx].col = [];
         for(let i=0; i<particleCount; i++) {
             states[idx].pos.push((Math.random()-0.5)*1000, (Math.random()-0.5)*1000, (Math.random()-0.5)*1000);
-            states[idx].col.push(0.4, 0.7, 1);
+            states[idx].col.push(0.5, 0.7, 1);
         }
     }
 
     function createDoubleCakeData(idx) {
         for(let i=0; i<particleCount; i++) {
             let x,y,z, r,g,b; const rand = Math.random();
-            if(rand < 0.4) { // 底层奶油
+            if(rand < 0.4) { 
                 const a = Math.random()*Math.PI*2; const rad = Math.random()*115;
                 x = Math.cos(a)*rad; y = Math.random()*50-100; z = Math.sin(a)*rad;
                 r=0.98; g=0.95; b=0.98;
-            } else if(rand < 0.7) { // 上层粉色层
+            } else if(rand < 0.7) { 
                 const a = Math.random()*Math.PI*2; const rad = Math.random()*80;
                 x = Math.cos(a)*rad; y = Math.random()*45-45; z = Math.sin(a)*rad;
                 r=1; g=0.7; b=0.8;
-            } else if(rand < 0.95) { // 金色蜡烛
+            } else if(rand < 0.95) { 
                 x = (Math.random()-0.5)*12; y = Math.random()*60+10; z = (Math.random()-0.5)*12;
                 r=1; g=0.85; b=0.3;
-            } else { // 动感火苗
+            } else { 
                 x = (Math.random()-0.5)*8; y = Math.random()*20+75; z = (Math.random()-0.5)*8;
                 r=1; g=0.3; b=0.1;
             }
@@ -111,25 +127,21 @@
     }
 
     function createPerson34(idx) {
-        return new Promise((resolve) => {
+        return new Promise((resolve, reject) => {
             const img = new Image();
             img.crossOrigin = "Anonymous"; 
-            img.src = "person.jpg"; 
+            img.src = "person.jpg?v=" + Date.now(); // 增加版本号防止缓存
             img.onload = () => {
                 const canvas = document.createElement('canvas');
                 const ctx = canvas.getContext('2d');
-                const targetW = 180; const targetH = 240; // 3:4 比例
+                const targetW = 180; const targetH = 240; 
                 canvas.width = targetW; canvas.height = targetH;
-                
-                // 裁切：保证无论原图比例如何，始终取中心 3:4 区域
                 let cropW = img.width; let cropH = img.width * (4/3);
                 if(cropH > img.height) { cropH = img.height; cropW = cropH * (3/4); }
                 ctx.drawImage(img, (img.width-cropW)/2, (img.height-cropH)/2, cropW, cropH, 0, 0, targetW, targetH);
-                
                 const data = ctx.getImageData(0, 0, targetW, targetH).data;
                 const temp = [];
                 const scale = 2.7; 
-
                 for (let y = 0; y < targetH; y++) {
                     for (let x = 0; x < targetW; x++) {
                         const i = (y * targetW + x) * 4;
@@ -149,7 +161,7 @@
                 }
                 resolve();
             };
-            img.onerror = () => { createStarData(idx); resolve(); };
+            img.onerror = () => reject(new Error('Load error'));
         });
     }
 
@@ -157,78 +169,4 @@
         const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d');
         canvas.width = 1000; canvas.height = 200;
         ctx.fillStyle = "white"; ctx.font = "bold 65px 'Microsoft YaHei', Arial"; ctx.textAlign = "center";
-        ctx.fillText("管老师，生日快乐", 500, 110);
-        
-        const data = ctx.getImageData(0,0,1000,200).data;
-        const pts = [];
-        for(let y=0; y<200; y+=2.2) for(let x=0; x<1000; x+=2.2) {
-            if(data[(y*1000+x)*4] > 120) pts.push({x: x-500, y: 100-y});
-        }
-        for(let i=0; i<particleCount; i++) {
-            const p = pts[i % pts.length];
-            states[idx].pos.push(p.x * 1.0, p.y * 1.0, 0);
-            // 蓝粉渐变逻辑
-            const mix = (p.x + 400) / 800;
-            states[idx].col.push(0.5 + mix * 0.5, 0.6, 0.95 - mix * 0.3); 
-        }
-    }
-
-    function nextStep() {
-        stateIndex = (stateIndex + 1) % 4;
-        const target = states[stateIndex];
-        const posAttr = geometry.attributes.position;
-        const colAttr = geometry.attributes.color;
-
-        for(let i=0; i<particleCount; i++) {
-            gsap.to(posAttr.array, {
-                [i*3]: target.pos[i*3], [i*3+1]: target.pos[i*3+1], [i*3+2]: target.pos[i*3+2],
-                duration: 2.2, ease: "power3.inOut", delay: Math.random()*0.3,
-                onUpdate: () => posAttr.needsUpdate = true
-            });
-            gsap.to(colAttr.array, {
-                [i*3]: target.col[i*3], [i*3+1]: target.col[i*3+1], [i*3+2]: target.col[i*3+2],
-                duration: 1.6, onUpdate: () => colAttr.needsUpdate = true
-            });
-        }
-    }
-
-    function setupInteraction() {
-        window.addEventListener('click', () => {
-            const ls = document.getElementById('loading-screen');
-            if(ls) { ls.style.opacity = 0; setTimeout(()=>ls.remove(), 800); }
-            nextStep();
-        });
-
-        const hands = new Hands({locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`});
-        hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.6 });
-        hands.onResults(res => {
-            const ls = document.getElementById('loading-screen');
-            if(ls) { ls.style.opacity = 0; setTimeout(()=>ls.remove(), 800); }
-            if(res.multiHandLandmarks?.length > 0) {
-                const hl = res.multiHandLandmarks[0];
-                if(Math.hypot(hl[8].x - hl[4].x, hl[8].y - hl[4].y) > 0.3 && !window.isT) { 
-                    window.isT = true; nextStep(); setTimeout(() => window.isT = false, 3000); 
-                }
-            }
-        });
-        new Camera(document.getElementById('input-video'), {
-            onFrame: async () => { await hands.send({image: document.getElementById('input-video')}); },
-            width: 640, height: 480
-        }).start();
-    }
-
-    function animate() {
-        requestAnimationFrame(animate);
-        points.rotation.y += 0.001;
-        // 火苗动态：状态1（蛋糕）时增加轻微抖动
-        if(stateIndex === 1) {
-            points.position.y = Math.sin(Date.now()*0.008)*2;
-        } else {
-            points.position.y = 0;
-        }
-        renderer.render(scene, camera);
-    }
-    init();
-</script>
-</body>
-</html>
+        ctx.fillText("
