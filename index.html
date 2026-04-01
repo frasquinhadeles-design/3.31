@@ -3,16 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>给管老师的生日惊喜 v3.0</title>
+    <title>给管老师的生日惊喜 v4.0</title>
     <style>
         body { margin: 0; overflow: hidden; background: #000; }
         #loading-screen {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: #000; display: flex; flex-direction: column;
             justify-content: center; align-items: center; z-index: 1000;
-            transition: opacity 0.8s;
         }
-        #status-text { color: #ff99cc; margin-top: 20px; font-family: "Microsoft YaHei"; text-align: center; font-size: 14px; line-height: 1.8; }
+        #status-text { color: #ff99cc; margin-top: 20px; font-family: "Microsoft YaHei"; text-align: center; font-size: 14px; }
         #hint { position: absolute; bottom: 30px; width: 100%; text-align: center; color: rgba(255,255,255,0.3); font-family: "Microsoft YaHei"; z-index: 50; pointer-events: none; }
         #input-video { position: absolute; width: 1px; height: 1px; opacity: 0; }
     </style>
@@ -21,7 +20,7 @@
 
 <div id="loading-screen">
     <div style="border: 3px solid #f3f3f3; border-top: 3px solid #ff99cc; border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite;"></div>
-    <div id="status-text">正在召唤粒子魔法...<br>请确保 person.jpg 已上传至仓库</div>
+    <div id="status-text">正在召唤魔法...<br>请确保 person.jpg 已上传</div>
 </div>
 <style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
 
@@ -35,13 +34,13 @@
 
 <script>
     let scene, camera, renderer, points, geometry;
-    const particleCount = 18000; // 增加粒子总数提升细腻度
-    let stateIndex = 0; // 0:星空, 1:蛋糕, 2:人物, 3:祝福语
+    const particleCount = 18000; 
+    let stateIndex = 0; 
     
     const states = [
         { pos: [], col: [] }, // 0: 星空
         { pos: [], col: [] }, // 1: 蛋糕
-        { pos: [], col: [] }, // 2: 人物 (由照片生成)
+        { pos: [], col: [] }, // 2: 人物 (裁切放大版)
         { pos: [], col: [] }  // 3: 文字
     ];
 
@@ -59,13 +58,11 @@
         const initialPos = new Float32Array(particleCount * 3);
         const initialCol = new Float32Array(particleCount * 3);
 
-        // 1. 预生成所有数据
         createRandomData(0);
         createCakeData(1);
         await createPersonData(2); 
         createTextData(3);
 
-        // 2. 初始化显示为星空
         for(let i=0; i<particleCount; i++) {
             initialPos[i*3] = states[0].pos[i*3];
             initialPos[i*3+1] = states[0].pos[i*3+1];
@@ -79,7 +76,7 @@
         geometry.setAttribute('color', new THREE.BufferAttribute(initialCol, 3));
 
         points = new THREE.Points(geometry, new THREE.PointsMaterial({
-            size: 2.2, vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, opacity: 0.8
+            size: 2.2, vertexColors: true, transparent: true, blending: THREE.AdditiveBlending
         }));
         scene.add(points);
 
@@ -87,26 +84,23 @@
         animate();
     }
 
-    // --- 各阶段数据生成逻辑 ---
-
     function createRandomData(idx) {
         for(let i=0; i<particleCount; i++) {
             states[idx].pos.push((Math.random()-0.5)*800, (Math.random()-0.5)*800, (Math.random()-0.5)*800);
-            states[idx].col.push(0.4, 0.7, 1.0);
+            states[idx].col.push(0.5, 0.7, 1);
         }
     }
 
     function createCakeData(idx) {
         for(let i=0; i<particleCount; i++) {
-            let x, y, z, r, g, b; const rand = Math.random();
-            if(rand < 0.6) { // 蛋糕主体
-                const a = Math.random()*Math.PI*2; 
-                const rad = Math.random()*(rand<0.3?110:80);
-                x = Math.cos(a)*rad; y = rand<0.3? Math.random()*60-90 : Math.random()*50-30; z = Math.sin(a)*rad;
-                r=1; g=0.75; b=0.85;
-            } else { // 蜡烛与火苗
-                x = (Math.random()-0.5)*12; y = Math.random()*70+20; z = (Math.random()-0.5)*12;
-                r=1; g=0.9; b=0.4;
+            let x,y,z, r,g,b; const rand = Math.random();
+            if(rand < 0.6) {
+                const a = Math.random()*Math.PI*2; const rad = Math.random()*(rand<0.3?110:80);
+                x = Math.cos(a)*rad; y = rand<0.3? Math.random()*50-80 : Math.random()*40-30; z = Math.sin(a)*rad;
+                r=1; g=0.8; b=0.9;
+            } else {
+                x = (Math.random()-0.5)*10; y = Math.random()*70+20; z = (Math.random()-0.5)*10;
+                r=1; g=0.9; b=0.3;
             }
             states[idx].pos.push(x, y, z);
             states[idx].col.push(r, g, b);
@@ -123,12 +117,12 @@
                 const canvas = document.createElement('canvas');
                 const ctx = canvas.getContext('2d');
                 
-                // 提高采样分辨率，让照片更清晰
-                const sampleSize = 240; 
+                // 重点：采用较高的正方形采样精度
+                const sampleSize = 250; 
                 canvas.width = sampleSize;
                 canvas.height = sampleSize;
                 
-                // 核心：中心正方形裁切算法，确保脸部和皇冠最大化显示
+                // 【核心算法】自动寻找照片中心正方形，防止拉伸或显示不全
                 let minSide = Math.min(img.width, img.height);
                 let sx = (img.width - minSide) / 2;
                 let sy = (img.height - minSide) / 2;
@@ -136,16 +130,17 @@
                 
                 const imageData = ctx.getImageData(0, 0, sampleSize, sampleSize).data;
                 const temp = [];
-                const scale = 3.0; // 放大倍数，确保占比大
+                // 放大倍数设为 2.8，确保填满屏幕上下区域
+                const scale = 2.8; 
 
                 for (let y = 0; y < sampleSize; y++) {
                     for (let x = 0; x < sampleSize; x++) {
                         const i = (y * sampleSize + x) * 4;
-                        if (imageData[i + 3] > 50) { 
+                        if (imageData[i + 3] > 60) { 
                             temp.push({
                                 x: (x - sampleSize / 2) * scale, 
-                                // 向上偏移 +20，垂直居中对齐
-                                y: (sampleSize / 2 - y) * scale + 20, 
+                                // 垂直居中修正
+                                y: (sampleSize / 2 - y) * scale, 
                                 r: imageData[i] / 255, 
                                 g: imageData[i + 1] / 255, 
                                 b: imageData[i + 2] / 255
@@ -156,7 +151,7 @@
 
                 for (let i = 0; i < particleCount; i++) {
                     const p = temp[i % temp.length];
-                    states[idx].pos.push(p.x, p.y, (Math.random() - 0.5) * 10);
+                    states[idx].pos.push(p.x, p.y, (Math.random() - 0.5) * 5);
                     states[idx].col.push(p.r, p.g, p.b);
                 }
                 resolve();
@@ -168,7 +163,7 @@
     function createTextData(idx) {
         const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d');
         canvas.width = 1000; canvas.height = 200;
-        ctx.fillStyle = "white"; ctx.font = "bold 60px 'Microsoft YaHei', Arial"; ctx.textAlign = "center";
+        ctx.fillStyle = "white"; ctx.font = "bold 50px Arial"; ctx.textAlign = "center";
         ctx.fillText("祝管老师天天开心，生日快乐！", 500, 100);
         const data = ctx.getImageData(0,0,1000,200).data;
         const pts = [];
@@ -182,8 +177,6 @@
         }
     }
 
-    // --- 交互与动画核心 ---
-
     function nextStep() {
         stateIndex = (stateIndex + 1) % 4;
         const target = states[stateIndex];
@@ -193,7 +186,7 @@
         for(let i=0; i<particleCount; i++) {
             gsap.to(posAttr.array, {
                 [i*3]: target.pos[i*3], [i*3+1]: target.pos[i*3+1], [i*3+2]: target.pos[i*3+2],
-                duration: 2.0, ease: "expo.out", delay: Math.random()*0.4,
+                duration: 2.0, ease: "power3.inOut", delay: Math.random()*0.4,
                 onUpdate: () => posAttr.needsUpdate = true
             });
             gsap.to(colAttr.array, {
@@ -205,40 +198,29 @@
 
     function setupInteraction() {
         window.addEventListener('click', nextStep);
-
         const hands = new Hands({locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`});
         hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.6 });
         hands.onResults(res => {
-            const loadScreen = document.getElementById('loading-screen');
-            if(loadScreen) { loadScreen.style.opacity = 0; setTimeout(()=>loadScreen.remove(), 800); }
-            
+            document.getElementById('loading-screen').style.display = 'none';
             if(res.multiHandLandmarks?.length > 0) {
                 const hl = res.multiHandLandmarks[0];
                 const dist = Math.hypot(hl[8].x - hl[4].x, hl[8].y - hl[4].y);
                 if(dist > 0.25 && !window.isTransitioning) { 
                     window.isTransitioning = true;
                     nextStep();
-                    setTimeout(() => window.isTransitioning = false, 2800); 
+                    setTimeout(() => window.isTransitioning = false, 2500); 
                 }
             }
         });
-
-        const cam = new Camera(document.getElementById('input-video'), {
+        new Camera(document.getElementById('input-video'), {
             onFrame: async () => { await hands.send({image: document.getElementById('input-video')}); },
             width: 640, height: 480
-        });
-        cam.start();
-        
-        // 兜底：如果10秒还没识别出手势，直接允许点击进入
-        setTimeout(() => {
-            const ls = document.getElementById('loading-screen');
-            if(ls) { ls.style.opacity = 0; setTimeout(()=>ls.remove(), 800); }
-        }, 10000);
+        }).start();
     }
 
     function animate() {
         requestAnimationFrame(animate);
-        points.rotation.y += 0.0012;
+        points.rotation.y += 0.001;
         renderer.render(scene, camera);
     }
 
