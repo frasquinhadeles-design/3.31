@@ -3,13 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>给管老师的生日惊喜 v6.0</title>
+    <title>给管老师的生日惊喜 v8.0</title>
     <style>
         body { margin: 0; overflow: hidden; background: #000; touch-action: none; }
         #loading-screen {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: #000; display: flex; flex-direction: column;
             justify-content: center; align-items: center; z-index: 1000;
+            transition: opacity 0.5s;
         }
         #status-text { color: #ff99cc; margin-top: 20px; font-family: "Microsoft YaHei"; text-align: center; font-size: 14px; }
         #hint { position: absolute; bottom: 40px; width: 100%; text-align: center; color: rgba(255,255,255,0.4); font-family: "Microsoft YaHei"; z-index: 50; pointer-events: none; }
@@ -20,11 +21,11 @@
 
 <div id="loading-screen">
     <div style="border: 3px solid #f3f3f3; border-top: 3px solid #ff99cc; border-radius: 50%; width: 35px; height: 35px; animation: spin 1s linear infinite;"></div>
-    <div id="status-text">正在召唤魔法手势...<br>请确保在光线充足处并开启摄像头</div>
+    <div id="status-text">✨ 正在校准魔法比例...<br>请在 Safari 中强制重新加载页面</div>
 </div>
 <style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
 
-<div id="hint">张开手掌触发魔法 | 或直接点击屏幕</div>
+<div id="hint">张开手掌触发魔法 | 或点击屏幕</div>
 <video id="input-video" playsinline></video>
 
 <script src="https://cdn.staticfile.org/three.js/r128/three.min.js"></script>
@@ -40,12 +41,14 @@
 
     async function init() {
         scene = new THREE.Scene();
-        camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 1, 1000);
-        camera.position.z = 450;
+        const aspect = window.innerWidth / window.innerHeight;
+        // 摄像机视野微调，确保远视角清晰
+        camera = new THREE.PerspectiveCamera(60, aspect, 1, 3000);
+        camera.position.z = 600; // 拉远相机
 
         renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.setPixelRatio(window.devicePixelRatio);
         document.body.appendChild(renderer.domElement);
 
         geometry = new THREE.BufferGeometry();
@@ -54,7 +57,7 @@
 
         createRandomData(0); 
         createCakeData(1);   
-        await createPersonData(2); 
+        await createPersonData(2); // 核心针对性适配
         createTextData(3);   
 
         for(let i=0; i<particleCount; i++) {
@@ -70,7 +73,7 @@
         geometry.setAttribute('color', new THREE.BufferAttribute(initialCol, 3));
 
         points = new THREE.Points(geometry, new THREE.PointsMaterial({
-            size: 2.2, vertexColors: true, transparent: true, blending: THREE.AdditiveBlending
+            size: 2.8, vertexColors: true, transparent: true, blending: THREE.AdditiveBlending
         }));
         scene.add(points);
 
@@ -80,8 +83,8 @@
 
     function createRandomData(idx) {
         for(let i=0; i<particleCount; i++) {
-            states[idx].pos.push((Math.random()-0.5)*900, (Math.random()-0.5)*900, (Math.random()-0.5)*900);
-            states[idx].col.push(0.5, 0.7, 1);
+            states[idx].pos.push((Math.random()-0.5)*1200, (Math.random()-0.5)*1200, (Math.random()-0.5)*1200);
+            states[idx].col.push(0.4, 0.7, 1);
         }
     }
 
@@ -89,8 +92,8 @@
         for(let i=0; i<particleCount; i++) {
             let x,y,z; const rand = Math.random();
             if(rand < 0.6) {
-                const a = Math.random()*Math.PI*2; const rad = Math.random()*110;
-                x = Math.cos(a)*rad; y = Math.random()*80-100; z = Math.sin(a)*rad;
+                const a = Math.random()*Math.PI*2; const rad = Math.random()*120;
+                x = Math.cos(a)*rad; y = Math.random()*100-150; z = Math.sin(a)*rad;
             } else {
                 x = (Math.random()-0.5)*15; y = Math.random()*80; z = (Math.random()-0.5)*15;
             }
@@ -108,25 +111,39 @@
             img.onload = () => {
                 const canvas = document.createElement('canvas');
                 const ctx = canvas.getContext('2d');
-                // 3:4 比例采样
-                const targetW = 180; const targetH = 240;
-                canvas.width = targetW; canvas.height = targetH;
                 
-                let minSide = Math.min(img.width, img.height);
-                // 强制中心 3:4 裁剪
-                ctx.drawImage(img, (img.width-minSide)/2, (img.height-minSide)/2, minSide, minSide, 0, 0, targetW, targetH);
+                // 1. 自动适配：根据手机屏幕比例裁切人像核心区
+                const screenAspect = window.innerWidth / window.innerHeight;
+                const canvasH = 250;
+                const canvasW = canvasH * screenAspect;
+                canvas.width = canvasW;
+                canvas.height = canvasH;
                 
-                const data = ctx.getImageData(0, 0, targetW, targetH).data;
+                let imgAspect = img.width / img.height;
+                let sx, sy, sw, sh;
+                if (imgAspect > screenAspect) {
+                    sh = img.height; sw = sh * screenAspect;
+                    sx = (img.width - sw) / 2; sy = 0;
+                } else {
+                    sw = img.width; sh = sw / screenAspect;
+                    sx = 0; sy = (img.height - sh) / 2;
+                }
+                
+                ctx.drawImage(img, sx, sy, sw, sh, 0, 0, canvasW, canvasH);
+                const data = ctx.getImageData(0, 0, canvasW, canvasH).data;
                 const temp = [];
-                const scale = 2.6; // 放大系数
+                // 【针对性核心修改】：缩放倍数降至 1.0，强制让图片在可视区域内变小
+                const scale = 1.0; 
 
-                for (let y = 0; y < targetH; y++) {
-                    for (let x = 0; x < targetW; x++) {
-                        const i = (y * targetW + x) * 4;
+                for (let y = 0; y < canvasH; y++) {
+                    for (let x = 0; x < canvasW; x++) {
+                        const i = (y * canvasW + x) * 4;
                         if (data[i + 3] > 80) { 
                             temp.push({
-                                x: (x - targetW / 2) * scale, 
-                                y: (targetH / 2 - y) * scale, 
+                                // 左右居中计算不变
+                                x: (x - canvasW / 2) * scale, 
+                                // 【终极修正】：坐标中心偏移计算减去 125，并且在最后向上平移 60，防止被“卡掉”
+                                y: (canvasH / 2 - y) * scale + 60, 
                                 r: data[i]/255, g: data[i+1]/255, b: data[i+2]/255
                             });
                         }
@@ -146,7 +163,7 @@
     function createTextData(idx) {
         const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d');
         canvas.width = 1000; canvas.height = 200;
-        ctx.fillStyle = "white"; ctx.font = "bold 60px Arial"; ctx.textAlign = "center";
+        ctx.fillStyle = "white"; ctx.font = "bold 50px Arial"; ctx.textAlign = "center";
         ctx.fillText("祝管老师天天开心，生日快乐！", 500, 100);
         const data = ctx.getImageData(0,0,1000,200).data;
         const pts = [];
@@ -169,7 +186,7 @@
         for(let i=0; i<particleCount; i++) {
             gsap.to(posAttr.array, {
                 [i*3]: target.pos[i*3], [i*3+1]: target.pos[i*3+1], [i*3+2]: target.pos[i*3+2],
-                duration: 2, ease: "power3.inOut", delay: Math.random()*0.3,
+                duration: 2.2, ease: "power3.inOut", delay: Math.random()*0.3,
                 onUpdate: () => posAttr.needsUpdate = true
             });
             gsap.to(colAttr.array, {
@@ -180,35 +197,26 @@
     }
 
     function setupInteraction() {
-        // 点击保底
         window.onclick = nextStep;
-
         const hands = new Hands({locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`});
         hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.6 });
-        
         hands.onResults(res => {
             const ls = document.getElementById('loading-screen');
-            if(ls) { ls.style.opacity = 0; setTimeout(()=>ls.remove(), 800); }
-            
+            if(ls) { ls.style.opacity = 0; setTimeout(()=>ls.remove(), 500); }
             if(res.multiHandLandmarks?.length > 0) {
                 const hl = res.multiHandLandmarks[0];
-                // 计算食指尖和拇指尖距离
                 const dist = Math.hypot(hl[8].x - hl[4].x, hl[8].y - hl[4].y);
-                if(dist > 0.25 && !window.isT) { 
-                    window.isT = true; 
-                    nextStep(); 
-                    setTimeout(() => window.isT = false, 2800); // 增加冷却，防止连跳
+                if(dist > 0.3 && !window.isTransitioning) { 
+                    window.isTransitioning = true; nextStep(); setTimeout(() => window.isTransitioning = false, 3000); 
                 }
             }
         });
-
         const cam = new Camera(document.getElementById('input-video'), {
             onFrame: async () => { await hands.send({image: document.getElementById('input-video')}); },
             width: 640, height: 480
         });
         cam.start();
     }
-
     function animate() {
         requestAnimationFrame(animate);
         points.rotation.y += 0.001;
