@@ -3,32 +3,32 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>给管老师的生日惊喜 v14.0</title>
+    <title>给管老师的生日惊喜 v12.0</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #000; touch-action: none; -webkit-tap-highlight-color: transparent; }
+        body { margin: 0; overflow: hidden; background: #000; touch-action: none; }
         #loading-screen {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: #000; display: flex; flex-direction: column;
             justify-content: center; align-items: center; z-index: 1000;
         }
-        #status-text { color: #ff99cc; margin-top: 20px; font-family: "Microsoft YaHei", sans-serif; text-align: center; font-size: 14px; padding: 0 20px; }
+        #status-text { color: #ff99cc; margin-top: 20px; font-family: "Microsoft YaHei", sans-serif; text-align: center; font-size: 14px; }
         #hint { position: absolute; bottom: 30px; width: 100%; text-align: center; color: rgba(255,255,255,0.4); font-family: "Microsoft YaHei"; z-index: 50; pointer-events: none; }
-        #input-video { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; visibility: hidden; }
+        #input-video { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
     </style>
 </head>
 <body>
 
-<div id="loading-screen" onclick="activateMagic()">
+<div id="loading-screen" onclick="this.style.display='none'">
     <div style="border: 3px solid #333; border-top: 3px solid #ff99cc; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite;"></div>
-    <div id="status-text">✨ 魔法正在同步到全设备...<br>请点击屏幕【开启惊喜】</div>
+    <div id="status-text">✨ 正在点燃魔法手势感应...<br>若 5 秒未进入请点击屏幕</div>
 </div>
 <style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
 
-<div id="hint">张开手掌触发魔法 | 或点击屏幕</div>
-<video id="input-video" playsinline muted autoplay webkit-playsinline></video>
+<div id="hint">手掌张开触发魔法 | 或点击屏幕</div>
+<video id="input-video" playsinline muted autoplay></video>
 
-<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/gsap@3.9.1/dist/gsap.min.js"></script>
+<script src="https://cdn.staticfile.org/three.js/r128/three.min.js"></script>
+<script src="https://cdn.staticfile.org/gsap/3.9.1/gsap.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
 
@@ -36,33 +36,23 @@
     let scene, camera, renderer, points, geometry;
     const particleCount = 20000; 
     let stateIndex = 0; 
-    window.isT = false; 
+    window.isT = false; // 初始化手势防抖锁
     const states = [{pos:[], col:[]}, {pos:[], col:[]}, {pos:[], col:[]}, {pos:[], col:[]}];
-
-    // --- 核心：Safari/安卓 兼容性激活函数 ---
-    function activateMagic() {
-        const video = document.getElementById('input-video');
-        video.play(); // 必须在用户点击事件中调用
-        document.getElementById('loading-screen').style.opacity = '0';
-        setTimeout(() => document.getElementById('loading-screen').style.display = 'none', 500);
-        
-        // 尝试启动手势识别
-        startCamera();
-    }
 
     async function init() {
         scene = new THREE.Scene();
         camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 1, 2000);
         camera.position.z = 500;
 
-        renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         document.body.appendChild(renderer.domElement);
 
         geometry = new THREE.BufferGeometry();
+        
         createStarData(0); 
-        createLuxCakeData(1);   
+        createDoubleCakeData(1);   
         await loadPerson34Strict(2); 
         createSingleText(3);   
 
@@ -72,15 +62,15 @@
         geometry.setAttribute('color', new THREE.BufferAttribute(initialCol, 3));
 
         points = new THREE.Points(geometry, new THREE.PointsMaterial({
-            size: 2.4, vertexColors: true, transparent: true, blending: THREE.AdditiveBlending
+            size: 2.3, vertexColors: true, transparent: true, blending: THREE.AdditiveBlending
         }));
         scene.add(points);
 
-        window.addEventListener('click', nextStep);
+        setupInteraction();
         animate();
+        setTimeout(() => { if(document.getElementById('loading-screen')) document.getElementById('loading-screen').style.display = 'none'; }, 2000);
     }
 
-    // 0. 星空
     function createStarData(idx) {
         for(let i=0; i<particleCount; i++) {
             states[idx].pos.push((Math.random()-0.5)*1000, (Math.random()-0.5)*1000, (Math.random()-0.5)*1000);
@@ -88,19 +78,18 @@
         }
     }
 
-    // 1. 豪华双层蛋糕
-    function createLuxCakeData(idx) {
+    function createDoubleCakeData(idx) {
         for(let i=0; i<particleCount; i++) {
             let x,y,z, r,g,b; const rand = Math.random();
-            if(rand < 0.4) { 
-                const a = Math.random()*Math.PI*2; const rad = Math.random()*115;
-                x = Math.cos(a)*rad; y = Math.random()*50-110; z = Math.sin(a)*rad;
+            if(rand < 0.4) { // 底层奶油
+                const a = Math.random()*Math.PI*2; const rad = Math.random()*120;
+                x = Math.cos(a)*rad; y = Math.random()*50-100; z = Math.sin(a)*rad;
                 r=0.98; g=0.95; b=0.98;
-            } else if(rand < 0.7) { 
-                const a = Math.random()*Math.PI*2; const rad = Math.random()*80;
+            } else if(rand < 0.7) { // 糕层
+                const a = Math.random()*Math.PI*2; const rad = Math.random()*85;
                 x = Math.cos(a)*rad; y = Math.random()*45-45; z = Math.sin(a)*rad;
                 r=1; g=0.75; b=0.85;
-            } else { 
+            } else { // 蜡烛火苗
                 x = (Math.random()-0.5)*12; y = Math.random()*75+20; z = (Math.random()-0.5)*12;
                 r=1; g=0.5; b=0.2;
             }
@@ -108,7 +97,6 @@
         }
     }
 
-    // 2. 强制 3:4 竖版人物
     function loadPerson34Strict(idx) {
         return new Promise((resolve) => {
             const img = new Image();
@@ -146,7 +134,6 @@
         });
     }
 
-    // 3. 蓝粉渐变文字
     function createSingleText(idx) {
         const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d');
         canvas.width = 600; canvas.height = 200;
@@ -183,13 +170,13 @@
         }
     }
 
-    // --- 核心：全兼容相机启动逻辑 ---
-    function startCamera() {
+    function setupInteraction() {
+        // 点击保底切换
+        window.addEventListener('click', nextStep);
+        
         const video = document.getElementById('input-video');
-        const hands = new Hands({
-            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
-        });
-
+        const hands = new Hands({locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`});
+        
         hands.setOptions({
             maxNumHands: 1,
             modelComplexity: 1,
@@ -197,31 +184,32 @@
             minTrackingConfidence: 0.5
         });
 
-        hands.onResults((results) => {
-            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-                const landmarks = results.multiHandLandmarks[0];
-                const dx = landmarks[12].x - landmarks[0].x;
-                const dy = landmarks[12].y - landmarks[0].y;
-                const distance = Math.sqrt(dx*dx + dy*dy);
+        hands.onResults(res => {
+            // 如果手部出现
+            if(res.multiHandLandmarks && res.multiHandLandmarks.length > 0) {
+                const hl = res.multiHandLandmarks[0];
+                // 简单的判定：食指尖到大拇指尖的距离（张开手掌距离会变大）
+                const dist = Math.hypot(hl[8].x - hl[4].x, hl[8].y - hl[4].y);
                 
-                if (distance > 0.35 && !window.isT) {
+                if(dist > 0.3 && !window.isT) {
                     window.isT = true;
                     nextStep();
-                    setTimeout(() => { window.isT = false; }, 3000); 
+                    setTimeout(() => { window.isT = false; }, 3000); // 冷却3秒防止连续触发
                 }
             }
         });
 
         const cam = new Camera(video, {
             onFrame: async () => {
-                await hands.send({ image: video });
+                await hands.send({image: video});
             },
             width: 640,
             height: 480
         });
-
-        cam.start().catch(err => {
-            console.log("相机自动启动受限，已激活点击模式保底");
+        
+        // 关键：静音启动相机
+        cam.start().catch(e => {
+            console.log("摄像头启动受限，请确保在 HTTPS 环境下运行并授予权限");
         });
     }
 
