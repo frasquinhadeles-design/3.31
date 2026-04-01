@@ -118,8 +118,8 @@ function createPersonData(idx) {
                 const canvas = document.createElement('canvas');
                 const ctx = canvas.getContext('2d');
                 
-                // 1. 降低采样精度，确保移动端不卡顿
-                const maxSide = 180; 
+                // 1. 限制采样精度，防止粒子过多导致手机卡顿
+                const maxSide = 160; 
                 const ratio = img.width / img.height;
                 let canvasW, canvasH;
                 
@@ -138,15 +138,21 @@ function createPersonData(idx) {
                 const imageData = ctx.getImageData(0, 0, canvasW, canvasH).data;
                 const temp = [];
 
+                // 2. 核心算法：自动计算缩放系数和偏移量
+                // 如果图片很长，scale 就要小一些，确保全身都能进屏幕
+                const scale = img.height > img.width ? 1.1 : 1.5; 
+                // 自动计算垂直偏移，将图片中心拉回到屏幕视觉中心
+                const verticalOffset = (canvasH * scale) / 4;
+
                 for (let y = 0; y < canvasH; y++) {
                     for (let x = 0; x < canvasW; x++) {
                         const i = (y * canvasW + x) * 4;
-                        if (imageData[i + 3] > 50) { 
+                        if (imageData[i + 3] > 60) { 
                             temp.push({
-                                // 【调整点1】缩放倍数降为 1.4，防止图片太大
-                                x: (x - canvasW / 2) * 1.4, 
-                                // 【调整点2】在高度计算后面减去 50，让图片整体下移，避免卡在顶部
-                                y: (canvasH / 2 - y) * 1.4 - 50, 
+                                // 左右居中
+                                x: (x - canvasW / 2) * scale, 
+                                // 上下居中：(一半高度 - 当前y) * 缩放 - 偏移补偿
+                                y: (canvasH / 2 - y) * scale - verticalOffset, 
                                 r: imageData[i] / 255, 
                                 g: imageData[i + 1] / 255, 
                                 b: imageData[i + 2] / 255
@@ -157,9 +163,10 @@ function createPersonData(idx) {
 
                 for (let i = 0; i < particleCount; i++) {
                     const p = temp[i % temp.length];
-                    states[idx].pos.push(p.x, p.y, (Math.random() - 0.5) * 10);
+                    states[idx].pos.push(p.x, p.y, (Math.random() - 0.5) * 5);
                     states[idx].col.push(p.r, p.g, p.b);
                 }
+                console.log("人物全图适配完成");
                 resolve();
             };
             img.onerror = () => {
