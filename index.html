@@ -3,61 +3,66 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>给管老师的生日惊喜 v5.0</title>
+    <title>给管老师的 3D 魔法惊喜</title>
     <style>
         body { margin: 0; overflow: hidden; background: #000; touch-action: none; }
-        #loading-screen {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: #000; display: flex; flex-direction: column;
-            justify-content: center; align-items: center; z-index: 1000;
+        #loading-hint {
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            color: #ff99cc; font-family: "Microsoft YaHei", Arial; text-align: center;
+            z-index: 100; transition: opacity 0.5s; pointer-events: none;
+            text-shadow: 0 0 10px rgba(255,153,204,0.8);
         }
-        #status-text { color: #ff99cc; margin-top: 20px; font-family: "Microsoft YaHei"; text-align: center; font-size: 14px; }
-        #hint { position: absolute; bottom: 30px; width: 100%; text-align: center; color: rgba(255,255,255,0.4); font-family: "Microsoft YaHei"; z-index: 50; pointer-events: none; }
-        #input-video { position: absolute; width: 1px; height: 1px; opacity: 0; }
+        #bottom-tips {
+            position: absolute; bottom: 30px; width: 100%; text-align: center;
+            color: rgba(255,255,255,0.4); font-size: 14px; font-family: Arial; pointer-events: none;
+        }
     </style>
 </head>
 <body>
 
-<div id="loading-screen">
-    <div style="border: 3px solid #f3f3f3; border-top: 3px solid #ff99cc; border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite;"></div>
-    <div id="status-text">正在校准粒子坐标...<br>请稍候</div>
+<div id="loading-hint">
+    ✨ 生日魔法正在汇聚...<br>请点击屏幕开启
 </div>
-<style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
+<div id="bottom-tips">点击屏幕：星空 → 蛋糕 → 管老师 ✨ → 祝福</div>
 
-<div id="hint">手掌张开 或 点击屏幕 切换</div>
-<video id="input-video" playsinline></video>
-
-<script src="https://cdn.staticfile.org/three.js/r128/three.min.js"></script>
-<script src="https://cdn.staticfile.org/gsap/3.9.1/gsap.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.9.1/gsap.min.js"></script>
 
 <script>
     let scene, camera, renderer, points, geometry;
-    const particleCount = 18000; 
+    const particleCount = 20000; // 增加粒子数量，让图像更细腻
+    
+    // 状态坐标容器
+    const states = [
+        { pos: [], col: [] }, // 0: 星空
+        { pos: [], col: [] }, // 1: 3D蛋糕
+        { pos: [], col: [] }, // 2: 3:4 精准人物 (戴皇冠比V)
+        { pos: [], col: [] }  // 3: 祝福文字
+    ];
     let stateIndex = 0; 
-    const states = [{pos:[], col:[]}, {pos:[], col:[]}, {pos:[], col:[]}, {pos:[], col:[]}];
+    let randomPos = []; // 初始星空坐标
 
     async function init() {
         scene = new THREE.Scene();
-        // 调整摄像机位置，确保视野开阔
-        camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 1, 2000);
-        camera.position.z = 500;
+        camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 1, 1000);
+        camera.position.z = 400; // 相机略拉近，让画面占比更大
 
         renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // 优化移动端视网膜屏显示
         document.body.appendChild(renderer.domElement);
 
         geometry = new THREE.BufferGeometry();
         const initialPos = new Float32Array(particleCount * 3);
         const initialCol = new Float32Array(particleCount * 3);
 
-        createRandomData(0); // 星空
-        createCakeData(1);   // 蛋糕
-        await createPersonData(2); // 人物
-        createTextData(3);   // 文字
+        // --- 核心：处理人像照片 (3:4 比例截取全身) ---
+        await createPersonData(2);
+        createRandomData(0);
+        createCakeData(1);
+        createTextData(3);
 
+        // 初始显示为星空
         for(let i=0; i<particleCount; i++) {
             initialPos[i*3] = states[0].pos[i*3];
             initialPos[i*3+1] = states[0].pos[i*3+1];
@@ -71,35 +76,35 @@
         geometry.setAttribute('color', new THREE.BufferAttribute(initialCol, 3));
 
         points = new THREE.Points(geometry, new THREE.PointsMaterial({
-            size: 2.5, vertexColors: true, transparent: true, blending: THREE.AdditiveBlending
+            size: 2, vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, opacity: 0.8
         }));
         scene.add(points);
 
-        setupInteraction();
         animate();
     }
 
     function createRandomData(idx) {
         for(let i=0; i<particleCount; i++) {
             states[idx].pos.push((Math.random()-0.5)*1000, (Math.random()-0.5)*1000, (Math.random()-0.5)*1000);
-            states[idx].col.push(0.4, 0.7, 1);
+            states[idx].col.push(0.5, 0.8, 1);
         }
     }
 
     function createCakeData(idx) {
         for(let i=0; i<particleCount; i++) {
             let x,y,z; const rand = Math.random();
-            if(rand < 0.6) {
-                const a = Math.random()*Math.PI*2; const rad = Math.random()*110;
-                x = Math.cos(a)*rad; y = Math.random()*100-100; z = Math.sin(a)*rad;
-            } else {
-                x = (Math.random()-0.5)*20; y = Math.random()*80; z = (Math.random()-0.5)*20;
+            if(rand < 0.6) { // 糕体
+                const a = Math.random()*Math.PI*2; const rad = Math.random()*(rand<0.3?110:80);
+                x = Math.cos(a)*rad; y = rand<0.3? Math.random()*50-100 : Math.random()*40-40; z = Math.sin(a)*rad;
+            } else { // 蜡烛
+                x = (Math.random()-0.5)*15; y = Math.random()*60+30; z = (Math.random()-0.5)*15;
             }
             states[idx].pos.push(x, y, z);
             states[idx].col.push(1, 0.8, 0.9);
         }
     }
 
+    // --- [核心修改] 3:4 比例精准截取人像全身 ---
     function createPersonData(idx) {
         return new Promise((resolve) => {
             const img = new Image();
@@ -109,36 +114,63 @@
             img.onload = () => {
                 const canvas = document.createElement('canvas');
                 const ctx = canvas.getContext('2d');
-                const sampleSize = 200; 
-                canvas.width = sampleSize; canvas.height = sampleSize;
                 
-                // 自动裁切正方形中心区域
+                // 1. 设定采样画布为严格 3:4 比例 (例如 180x240)
+                const targetW = 180;
+                const targetH = 240; // 严格的 3:4
+                canvas.width = targetW;
+                canvas.height = targetH;
+                
+                // 2. 核心算法：中心 3:4 裁切 (CROP)
+                // 这将自动截取照片正中心比 V 女士的全身区域
                 let minSide = Math.min(img.width, img.height);
-                ctx.drawImage(img, (img.width-minSide)/2, (img.height-minSide)/2, minSide, minSide, 0, 0, sampleSize, sampleSize);
+                let cropW, cropH;
                 
-                const data = ctx.getImageData(0, 0, sampleSize, sampleSize).data;
+                if (img.width / img.height > targetW / targetH) {
+                    // 图片太宽，截取中间高度全覆盖的正方形
+                    cropH = img.height;
+                    cropW = cropH * (targetW / targetH);
+                } else {
+                    // 图片太高，截取中间宽度全覆盖的正方形
+                    cropW = img.width;
+                    cropH = cropW * (targetH / targetW);
+                }
+                
+                let sx = (img.width - cropW) / 2;
+                let sy = (img.height - cropH) / 2;
+                ctx.drawImage(img, sx, sy, cropW, cropH, 0, 0, targetW, targetH);
+                
+                const data = ctx.getImageData(0, 0, targetW, targetH).data;
                 const temp = [];
-                // 核心：根据屏幕比例调整缩放，防溢出
-                const scale = window.innerHeight > window.innerWidth ? 2.2 : 3.0;
+                // 放大倍数设为 2.8，确保人像在手机屏幕上占比非常大
+                const scale = 2.8; 
 
-                for (let y = 0; y < sampleSize; y++) {
-                    for (let x = 0; x < sampleSize; x++) {
-                        const i = (y * sampleSize + x) * 4;
-                        if (data[i + 3] > 80) { 
+                for (let y = 0; y < targetH; y++) {
+                    for (let x = 0; x < targetW; x++) {
+                        const i = (y * targetW + x) * 4;
+                        const alpha = data[i+3];
+                        // 过滤算法：只要不完全透明，且不是全黑背景，就采样
+                        if (alpha > 80) { 
                             temp.push({
-                                // 强制将粒子坐标中心锚定在 0,0
-                                x: (x - sampleSize / 2) * scale, 
-                                y: (sampleSize / 2 - y) * scale, 
-                                r: data[i]/255, g: data[i+1]/255, b: data[i+2]/255
+                                // 坐标归零居中计算
+                                x: (x - targetW / 2) * scale, 
+                                // Y轴向上，图片向下移动 -30，调整视觉中心
+                                y: (targetH / 2 - y) * scale - 30, 
+                                r: data[i] / 255, 
+                                g: data[i+1] / 255, 
+                                b: data[i+2] / 255
                             });
                         }
                     }
                 }
+
+                // 将照片像素分配给全局粒子
                 for (let i = 0; i < particleCount; i++) {
                     const p = temp[i % temp.length];
-                    states[idx].pos.push(p.x, p.y, (Math.random()-0.5)*10);
+                    states[idx].pos.push(p.x, p.y, (Math.random() - 0.5) * 8);
                     states[idx].col.push(p.r, p.g, p.b);
                 }
+                console.log("3:4 人物全图适配完成");
                 resolve();
             };
             img.onerror = () => { createRandomData(idx); resolve(); };
@@ -148,11 +180,11 @@
     function createTextData(idx) {
         const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d');
         canvas.width = 1000; canvas.height = 200;
-        ctx.fillStyle = "white"; ctx.font = "bold 60px Arial"; ctx.textAlign = "center";
+        ctx.fillStyle = "white"; ctx.font = "bold 50px Arial"; ctx.textAlign = "center";
         ctx.fillText("祝管老师天天开心，生日快乐！", 500, 100);
         const data = ctx.getImageData(0,0,1000,200).data;
         const pts = [];
-        for(let y=0; y<200; y+=2) for(let x=0; x<1000; x+=2) {
+        for(let y=0; y<200; y+=3) for(let x=0; x<1000; x+=3) {
             if(data[(y*1000+x)*4] > 120) pts.push(x-500, 100-y, 0);
         }
         for(let i=0; i<particleCount; i++) {
@@ -162,7 +194,11 @@
         }
     }
 
-    function nextStep() {
+    // --- 核心切换逻辑 ---
+    window.addEventListener('click', () => {
+        // 隐藏点击提示
+        document.getElementById('loading-hint').style.opacity = 0;
+        
         stateIndex = (stateIndex + 1) % 4;
         const target = states[stateIndex];
         const posAttr = geometry.attributes.position;
@@ -171,7 +207,7 @@
         for(let i=0; i<particleCount; i++) {
             gsap.to(posAttr.array, {
                 [i*3]: target.pos[i*3], [i*3+1]: target.pos[i*3+1], [i*3+2]: target.pos[i*3+2],
-                duration: 2, ease: "power3.inOut", delay: Math.random()*0.3,
+                duration: 2, ease: "expo.out", delay: Math.random()*0.4,
                 onUpdate: () => posAttr.needsUpdate = true
             });
             gsap.to(colAttr.array, {
@@ -179,32 +215,14 @@
                 duration: 1.5, onUpdate: () => colAttr.needsUpdate = true
             });
         }
-    }
-
-    function setupInteraction() {
-        window.onclick = nextStep;
-        const hands = new Hands({locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`});
-        hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.6 });
-        hands.onResults(res => {
-            document.getElementById('loading-screen').style.display = 'none';
-            if(res.multiHandLandmarks?.length > 0) {
-                const hl = res.multiHandLandmarks[0];
-                if(Math.hypot(hl[8].x - hl[4].x, hl[8].y - hl[4].y) > 0.25) { 
-                    if(!window.isT) { window.isT = true; nextStep(); setTimeout(() => window.isT = false, 3000); }
-                }
-            }
-        });
-        new Camera(document.getElementById('input-video'), {
-            onFrame: async () => { await hands.send({image: document.getElementById('input-video')}); },
-            width: 640, height: 480
-        }).start();
-    }
+    });
 
     function animate() {
         requestAnimationFrame(animate);
-        points.rotation.y += 0.001;
+        points.rotation.y += 0.0012;
         renderer.render(scene, camera);
     }
+
     init();
 </script>
 </body>
