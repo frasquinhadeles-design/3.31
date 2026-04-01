@@ -3,32 +3,33 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>给管老师的生日惊喜 v14.0</title>
+    <title>管老师生日快乐 - 3D魔法</title>
     <style>
         body { margin: 0; overflow: hidden; background: #000; touch-action: none; -webkit-tap-highlight-color: transparent; }
         #loading-screen {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: #000; display: flex; flex-direction: column;
             justify-content: center; align-items: center; z-index: 1000;
+            transition: opacity 0.5s;
         }
         #status-text { color: #ff99cc; margin-top: 20px; font-family: "Microsoft YaHei", sans-serif; text-align: center; font-size: 14px; padding: 0 20px; }
         #hint { position: absolute; bottom: 30px; width: 100%; text-align: center; color: rgba(255,255,255,0.4); font-family: "Microsoft YaHei"; z-index: 50; pointer-events: none; }
-        #input-video { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; visibility: hidden; }
+        #input-video { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
     </style>
 </head>
 <body>
 
-<div id="loading-screen" onclick="activateMagic()">
+<div id="loading-screen" onclick="startMagic()">
     <div style="border: 3px solid #333; border-top: 3px solid #ff99cc; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite;"></div>
-    <div id="status-text">✨ 魔法正在同步到全设备...<br>请点击屏幕【开启惊喜】</div>
+    <div id="status-text">✨ 魔法校准完毕<br>点击屏幕【开启惊喜】</div>
 </div>
 <style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
 
-<div id="hint">张开手掌触发魔法 | 或点击屏幕</div>
-<video id="input-video" playsinline muted autoplay webkit-playsinline></video>
+<div id="hint">点点屏幕 或 挥挥手掌</div>
+<video id="input-video" playsinline muted autoplay></video>
 
-<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/gsap@3.9.1/dist/gsap.min.js"></script>
+<script src="https://cdn.staticfile.org/three.js/r128/three.min.js"></script>
+<script src="https://cdn.staticfile.org/gsap/3.9.1/gsap.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
 
@@ -36,18 +37,18 @@
     let scene, camera, renderer, points, geometry;
     const particleCount = 20000; 
     let stateIndex = 0; 
-    window.isT = false; 
     const states = [{pos:[], col:[]}, {pos:[], col:[]}, {pos:[], col:[]}, {pos:[], col:[]}];
+    let gestureActive = false;
 
-    // --- 核心：Safari/安卓 兼容性激活函数 ---
-    function activateMagic() {
-        const video = document.getElementById('input-video');
-        video.play(); // 必须在用户点击事件中调用
+    // 开启体验
+    function startMagic() {
         document.getElementById('loading-screen').style.opacity = '0';
         setTimeout(() => document.getElementById('loading-screen').style.display = 'none', 500);
         
-        // 尝试启动手势识别
-        startCamera();
+        // 尝试激活相机和手势
+        if (typeof Hands !== 'undefined') {
+            initGesture();
+        }
     }
 
     async function init() {
@@ -55,16 +56,18 @@
         camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 1, 2000);
         camera.position.z = 500;
 
-        renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         document.body.appendChild(renderer.domElement);
 
         geometry = new THREE.BufferGeometry();
+        
+        // 静态数据立即生成
         createStarData(0); 
-        createLuxCakeData(1);   
-        await loadPerson34Strict(2); 
-        createSingleText(3);   
+        createDoubleCakeData(1);   
+        await loadPerson34(2); 
+        createGradientText(3);   
 
         const initialPos = new Float32Array(states[0].pos);
         const initialCol = new Float32Array(states[0].col);
@@ -72,7 +75,7 @@
         geometry.setAttribute('color', new THREE.BufferAttribute(initialCol, 3));
 
         points = new THREE.Points(geometry, new THREE.PointsMaterial({
-            size: 2.4, vertexColors: true, transparent: true, blending: THREE.AdditiveBlending
+            size: 2.3, vertexColors: true, transparent: true, blending: THREE.AdditiveBlending
         }));
         scene.add(points);
 
@@ -80,7 +83,6 @@
         animate();
     }
 
-    // 0. 星空
     function createStarData(idx) {
         for(let i=0; i<particleCount; i++) {
             states[idx].pos.push((Math.random()-0.5)*1000, (Math.random()-0.5)*1000, (Math.random()-0.5)*1000);
@@ -88,28 +90,27 @@
         }
     }
 
-    // 1. 豪华双层蛋糕
-    function createLuxCakeData(idx) {
+    function createDoubleCakeData(idx) {
         for(let i=0; i<particleCount; i++) {
             let x,y,z, r,g,b; const rand = Math.random();
             if(rand < 0.4) { 
                 const a = Math.random()*Math.PI*2; const rad = Math.random()*115;
-                x = Math.cos(a)*rad; y = Math.random()*50-110; z = Math.sin(a)*rad;
+                x = Math.cos(a)*rad; y = Math.random()*50-100; z = Math.sin(a)*rad;
                 r=0.98; g=0.95; b=0.98;
             } else if(rand < 0.7) { 
                 const a = Math.random()*Math.PI*2; const rad = Math.random()*80;
                 x = Math.cos(a)*rad; y = Math.random()*45-45; z = Math.sin(a)*rad;
-                r=1; g=0.75; b=0.85;
+                r=1; g=0.7; b=0.8;
             } else { 
-                x = (Math.random()-0.5)*12; y = Math.random()*75+20; z = (Math.random()-0.5)*12;
-                r=1; g=0.5; b=0.2;
+                x = (Math.random()-0.5)*12; y = Math.random()*85; z = (Math.random()-0.5)*12;
+                r=1; g=0.6; b=0.2;
             }
             states[idx].pos.push(x, y, z); states[idx].col.push(r, g, b);
         }
     }
 
-    // 2. 强制 3:4 竖版人物
-    function loadPerson34Strict(idx) {
+    // 强制 3:4 裁切与显示
+    function loadPerson34(idx) {
         return new Promise((resolve) => {
             const img = new Image();
             img.crossOrigin = "Anonymous"; 
@@ -117,21 +118,19 @@
             img.onload = () => {
                 const canvas = document.createElement('canvas');
                 const ctx = canvas.getContext('2d');
-                const sw = 150, sh = 200; 
-                canvas.width = sw; canvas.height = sh;
+                canvas.width = 150; canvas.height = 200; 
                 let iw = img.width, ih = img.height;
-                let aspect = 0.75;
                 let cw = iw, ch = ih;
-                if (iw / ih > aspect) { cw = ih * aspect; } else { ch = iw / aspect; }
-                ctx.drawImage(img, (iw-cw)/2, (ih-ch)/2, cw, ch, 0, 0, sw, sh);
-                const data = ctx.getImageData(0, 0, sw, sh).data;
+                if (iw / ih > 0.75) { cw = ih * 0.75; } else { ch = iw / 0.75; }
+                ctx.drawImage(img, (iw-cw)/2, (ih-ch)/2, cw, ch, 0, 0, 150, 200);
+                const data = ctx.getImageData(0, 0, 150, 200).data;
                 const temp = [];
-                const zoom = 2.8; 
-                for (let y = 0; y < sh; y++) {
-                    for (let x = 0; x < sw; x++) {
-                        const i = (y * sw + x) * 4;
+                const scale = 2.8; 
+                for (let y = 0; y < 200; y++) {
+                    for (let x = 0; x < 150; x++) {
+                        const i = (y * 150 + x) * 4;
                         if (data[i+3] > 60) {
-                            temp.push({x: (x - sw/2) * zoom, y: (sh/2 - y) * zoom - 30, r: data[i]/255, g: data[i+1]/255, b: data[i+2]/255});
+                            temp.push({x: (x-75)*scale, y:(100-y)*scale-30, r:data[i]/255, g:data[i+1]/255, b:data[i+2]/255});
                         }
                     }
                 }
@@ -146,15 +145,14 @@
         });
     }
 
-    // 3. 蓝粉渐变文字
-    function createSingleText(idx) {
+    function createGradientText(idx) {
         const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d');
         canvas.width = 600; canvas.height = 200;
         ctx.fillStyle = "white"; ctx.font = "bold 60px Arial"; ctx.textAlign = "center";
         ctx.fillText("管老师，生日快乐", 300, 110);
         const data = ctx.getImageData(0,0,600,200).data;
         const pts = [];
-        for(let y=0; y<200; y+=2.2) for(let x=0; x<600; x+=2.2) {
+        for(let y=0; y<200; y+=2) for(let x=0; x<600; x+=2) {
             if(data[(y*600+x)*4] > 120) pts.push({x: x-300, y: 100-y});
         }
         for(let i=0; i<particleCount; i++) {
@@ -183,53 +181,40 @@
         }
     }
 
-    // --- 核心：全兼容相机启动逻辑 ---
-    function startCamera() {
-        const video = document.getElementById('input-video');
-        const hands = new Hands({
-            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
-        });
-
-        hands.setOptions({
-            maxNumHands: 1,
-            modelComplexity: 1,
-            minDetectionConfidence: 0.5,
-            minTrackingConfidence: 0.5
-        });
-
-        hands.onResults((results) => {
-            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-                const landmarks = results.multiHandLandmarks[0];
-                const dx = landmarks[12].x - landmarks[0].x;
-                const dy = landmarks[12].y - landmarks[0].y;
-                const distance = Math.sqrt(dx*dx + dy*dy);
-                
-                if (distance > 0.35 && !window.isT) {
-                    window.isT = true;
-                    nextStep();
-                    setTimeout(() => { window.isT = false; }, 3000); 
+    // 重点：全兼容手势逻辑
+    function initGesture() {
+        try {
+            const video = document.getElementById('input-video');
+            const hands = new Hands({locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`});
+            hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.6 });
+            
+            hands.onResults(res => {
+                if(res.multiHandLandmarks?.length > 0) {
+                    const hl = res.multiHandLandmarks[0];
+                    // 计算中指尖到掌心的垂直距离
+                    const dy = hl[0].y - hl[12].y; 
+                    if(dy > 0.3 && !gestureActive) {
+                        gestureActive = true; 
+                        nextStep(); 
+                        setTimeout(() => gestureActive = false, 3000);
+                    }
                 }
-            }
-        });
+            });
 
-        const cam = new Camera(video, {
-            onFrame: async () => {
-                await hands.send({ image: video });
-            },
-            width: 640,
-            height: 480
-        });
-
-        cam.start().catch(err => {
-            console.log("相机自动启动受限，已激活点击模式保底");
-        });
+            const cam = new Camera(video, {
+                onFrame: async () => { await hands.send({image: video}); },
+                width: 640, height: 480
+            });
+            cam.start();
+        } catch(e) { console.warn("摄像头启动失败，仅支持点击模式"); }
     }
 
     function animate() {
         requestAnimationFrame(animate);
-        points.rotation.y += 0.0012;
+        points.rotation.y += 0.001;
         renderer.render(scene, camera);
     }
+
     init();
 </script>
 </body>
