@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>给管老师的生日魔法 v10.0</title>
+    <title>管老师生日快乐 - 3D魔法版</title>
     <style>
         body { margin: 0; overflow: hidden; background: #000; touch-action: none; }
         #loading-screen {
@@ -12,20 +12,20 @@
             justify-content: center; align-items: center; z-index: 1000;
             transition: opacity 0.8s;
         }
-        #status-text { color: #ff99cc; margin-top: 20px; font-family: "Microsoft YaHei"; text-align: center; font-size: 14px; }
-        #hint { position: absolute; bottom: 30px; width: 100%; text-align: center; color: rgba(255,255,255,0.3); font-family: "Microsoft YaHei"; z-index: 50; pointer-events: none; }
-        #input-video { position: absolute; width: 1px; height: 1px; opacity: 0; }
+        #status-text { color: #ff99cc; margin-top: 20px; font-family: "Microsoft YaHei", sans-serif; text-align: center; font-size: 14px; line-height: 1.6; }
+        #hint { position: absolute; bottom: 30px; width: 100%; text-align: center; color: rgba(255,255,255,0.4); font-family: "Microsoft YaHei"; z-index: 50; pointer-events: none; }
+        #input-video { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
     </style>
 </head>
 <body>
 
 <div id="loading-screen">
     <div style="border: 3px solid #f3f3f3; border-top: 3px solid #ff99cc; border-radius: 50%; width: 35px; height: 35px; animation: spin 1s linear infinite;"></div>
-    <div id="status-text">✨ 正在校准 3D 魔法中心...<br>请在 Safari 中点击刷新</div>
+    <div id="status-text">✨ 正在校准多端兼容环境...<br>请确保 person.jpg 位于根目录</div>
 </div>
 <style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
 
-<div id="hint">张开手掌 或 点击屏幕 开启惊喜</div>
+<div id="hint">张开手掌触发魔法 | 或点击屏幕切换</div>
 <video id="input-video" playsinline></video>
 
 <script src="https://cdn.staticfile.org/three.js/r128/three.min.js"></script>
@@ -35,15 +35,15 @@
 
 <script>
     let scene, camera, renderer, points, geometry;
-    const particleCount = 20000; // 粒子总数提升
-    let stateIndex = 0; 
+    const particleCount = 20000; 
+    let stateIndex = 0; // 0:星空, 1:双层蛋糕, 2:3:4人物, 3:渐变文字
     const states = [{pos:[], col:[]}, {pos:[], col:[]}, {pos:[], col:[]}, {pos:[], col:[]}];
 
     async function init() {
         scene = new THREE.Scene();
         const aspect = window.innerWidth / window.innerHeight;
         camera = new THREE.PerspectiveCamera(60, aspect, 1, 2000);
-        camera.position.z = 450; 
+        camera.position.z = 450;
 
         renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
@@ -54,10 +54,11 @@
         const initialPos = new Float32Array(particleCount * 3);
         const initialCol = new Float32Array(particleCount * 3);
 
-        createRandomData(0); 
-        createCakeData(1);   
-        await createPersonData(2); // 核心：高清晰度中心截取
-        createTextData(3);   
+        // --- 预生成所有阶段数据 ---
+        createStarData(0); 
+        createLuxCakeData(1);   
+        await createPerson34Data(2); 
+        createGradientTextData(3);   
 
         for(let i=0; i<particleCount; i++) {
             initialPos[i*3] = states[0].pos[i*3];
@@ -72,7 +73,7 @@
         geometry.setAttribute('color', new THREE.BufferAttribute(initialCol, 3));
 
         points = new THREE.Points(geometry, new THREE.PointsMaterial({
-            size: 2.2, vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, opacity: 0.8
+            size: 2.3, vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, opacity: 0.85
         }));
         scene.add(points);
 
@@ -80,96 +81,102 @@
         animate();
     }
 
-    function createRandomData(idx) {
+    // 0. 星空
+    function createStarData(idx) {
         for(let i=0; i<particleCount; i++) {
-            states[idx].pos.push((Math.random()-0.5)*900, (Math.random()-0.5)*900, (Math.random()-0.5)*1000);
+            states[idx].pos.push((Math.random()-0.5)*1000, (Math.random()-0.5)*1000, (Math.random()-0.5)*1000);
             states[idx].col.push(0.5, 0.7, 1);
         }
     }
 
-    function createCakeData(idx) {
+    // 1. 豪华双层蛋糕
+    function createLuxCakeData(idx) {
         for(let i=0; i<particleCount; i++) {
-            let x,y,z; const rand = Math.random();
-            if(rand < 0.6) {
+            let x,y,z, r,g,b; const rand = Math.random();
+            if(rand < 0.35) { // 底层 (大圆柱+奶油装饰)
                 const a = Math.random()*Math.PI*2; const rad = Math.random()*110;
-                x = Math.cos(a)*rad; y = Math.random()*80-100; z = Math.sin(a)*rad;
-                states[idx].col.push(1, 0.8, 0.9);
-            } else {
-                x = (Math.random()-0.5)*20; y = Math.random()*80; z = (Math.random()-0.5)*20;
-                states[idx].col.push(1, 1, 0.4);
+                x = Math.cos(a)*rad; y = Math.random()*50-100; z = Math.sin(a)*rad;
+                r=1; g=0.9; b=0.95; // 奶油白
+            } else if(rand < 0.65) { // 上层 (小圆柱)
+                const a = Math.random()*Math.PI*2; const rad = Math.random()*75;
+                x = Math.cos(a)*rad; y = Math.random()*45-40; z = Math.sin(a)*rad;
+                r=1; g=0.75; b=0.85; // 粉色
+            } else if(rand < 0.95) { // 蜡烛 (金色)
+                x = (Math.random()-0.5)*10; y = Math.random()*65+15; z = (Math.random()-0.5)*10;
+                r=1; g=0.85; b=0.3;
+            } else { // 燃烧火苗 (橙红)
+                x = (Math.random()-0.5)*6; y = Math.random()*15+80; z = (Math.random()-0.5)*6;
+                r=1; g=0.4; b=0.2;
             }
             states[idx].pos.push(x, y, z);
+            states[idx].col.push(r, g, b);
         }
     }
 
-    function createPersonData(idx) {
+    // 2. 3:4 比例精准人物
+    function createPerson34Data(idx) {
         return new Promise((resolve) => {
             const img = new Image();
             img.crossOrigin = "Anonymous"; 
             img.src = "person.jpg"; 
-
             img.onload = () => {
                 const canvas = document.createElement('canvas');
                 const ctx = canvas.getContext('2d');
+                const targetW = 180; const targetH = 240; // 3:4 比例
+                canvas.width = targetW; canvas.height = targetH;
                 
-                // 1. 高精度正方形采样 (250x250)
-                const sampleSize = 250; 
-                canvas.width = sampleSize;
-                canvas.height = sampleSize;
+                // 裁切算法：从原图截取中心 3:4 区域
+                let minSideW = img.width; let minSideH = img.width * (4/3);
+                if(minSideH > img.height) { minSideH = img.height; minSideW = minSideH * (3/4); }
+                ctx.drawImage(img, (img.width-minSideW)/2, (img.height-minSideH)/2, minSideW, minSideH, 0, 0, targetW, targetH);
                 
-                // 2. 核心：中心裁切算法
-                // 无论原图多长，只截取最中间的正方形（包含皇冠和脸）
-                let minSide = Math.min(img.width, img.height);
-                let sx = (img.width - minSide) / 2;
-                let sy = (img.height - minSide) / 2;
-                ctx.drawImage(img, sx, sy, minSide, minSide, 0, 0, sampleSize, sampleSize);
-                
-                const imageData = ctx.getImageData(0, 0, sampleSize, sampleSize).data;
+                const data = ctx.getImageData(0, 0, targetW, targetH).data;
                 const temp = [];
-                // 3. 放大系数设为 2.8，确保人像占比极大
                 const scale = 2.8; 
 
-                for (let y = 0; y < sampleSize; y++) {
-                    for (let x = 0; x < sampleSize; x++) {
-                        const i = (y * sampleSize + x) * 4;
-                        if (imageData[i + 3] > 60) { 
+                for (let y = 0; y < targetH; y++) {
+                    for (let x = 0; x < targetW; x++) {
+                        const i = (y * targetW + x) * 4;
+                        if (data[i + 3] > 60) { 
                             temp.push({
-                                x: (x - sampleSize / 2) * scale, 
-                                // 垂直中心校正，向下微调 20 确保头部不被刘海遮挡
-                                y: (sampleSize / 2 - y) * scale - 20, 
-                                r: imageData[i] / 255, 
-                                g: imageData[i + 1] / 255, 
-                                b: imageData[i + 2] / 255
+                                x: (x - targetW / 2) * scale, 
+                                y: (targetH / 2 - y) * scale - 20, 
+                                r: data[i]/255, g: data[i+1]/255, b: data[i+2]/255
                             });
                         }
                     }
                 }
-
                 for (let i = 0; i < particleCount; i++) {
                     const p = temp[i % temp.length];
-                    states[idx].pos.push(p.x, p.y, (Math.random() - 0.5) * 6);
+                    states[idx].pos.push(p.x, p.y, (Math.random()-0.5)*8);
                     states[idx].col.push(p.r, p.g, p.b);
                 }
                 resolve();
             };
-            img.onerror = () => { createRandomData(idx); resolve(); };
+            img.onerror = () => { createStarData(idx); resolve(); };
         });
     }
 
-    function createTextData(idx) {
+    // 3. 蓝粉渐变祝福语
+    function createGradientTextData(idx) {
         const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d');
         canvas.width = 1000; canvas.height = 200;
-        ctx.fillStyle = "white"; ctx.font = "bold 60px 'Microsoft YaHei', Arial"; ctx.textAlign = "center";
-        ctx.fillText("祝管老师天天开心，生日快乐！", 500, 100);
+        ctx.fillStyle = "white"; ctx.font = "bold 70px 'Microsoft YaHei', Arial"; ctx.textAlign = "center";
+        ctx.fillText("管老师，生日快乐", 500, 110);
+        
         const data = ctx.getImageData(0,0,1000,200).data;
         const pts = [];
-        for(let y=0; y<200; y+=2) for(let x=0; x<1000; x+=2) {
-            if(data[(y*1000+x)*4] > 120) pts.push(x-500, 100-y, 0);
+        for(let y=0; y<200; y+=2.5) for(let x=0; x<1000; x+=2.5) {
+            if(data[(y*1000+x)*4] > 120) {
+                pts.push({x: x-500, y: 100-y});
+            }
         }
         for(let i=0; i<particleCount; i++) {
-            const pidx = (i % (pts.length/3)) * 3;
-            states[idx].pos.push(pts[pidx], pts[pidx+1], pts[pidx+2]);
-            states[idx].col.push(1, 1, 1);
+            const p = pts[i % pts.length];
+            states[idx].pos.push(p.x * 1.1, p.y * 1.1, 0);
+            // 渐变色：左边偏蓝，右边偏粉
+            const ratio = (p.x + 500) / 1000;
+            states[idx].col.push(0.5 + ratio * 0.5, 0.6, 0.9 - ratio * 0.2); 
         }
     }
 
@@ -182,7 +189,7 @@
         for(let i=0; i<particleCount; i++) {
             gsap.to(posAttr.array, {
                 [i*3]: target.pos[i*3], [i*3+1]: target.pos[i*3+1], [i*3+2]: target.pos[i*3+2],
-                duration: 2.2, ease: "expo.out", delay: Math.random()*0.3,
+                duration: 2, ease: "power3.inOut", delay: Math.random()*0.35,
                 onUpdate: () => posAttr.needsUpdate = true
             });
             gsap.to(colAttr.array, {
@@ -193,7 +200,14 @@
     }
 
     function setupInteraction() {
-        window.addEventListener('click', nextStep);
+        // 1. 点击控制
+        window.addEventListener('click', () => {
+            const ls = document.getElementById('loading-screen');
+            if(ls) { ls.style.opacity = 0; setTimeout(()=>ls.remove(), 800); }
+            nextStep();
+        });
+
+        // 2. 手势控制 (Safari/Android/Win兼容)
         const hands = new Hands({locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`});
         hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.6 });
         hands.onResults(res => {
@@ -201,20 +215,29 @@
             if(ls) { ls.style.opacity = 0; setTimeout(()=>ls.remove(), 800); }
             if(res.multiHandLandmarks?.length > 0) {
                 const hl = res.multiHandLandmarks[0];
-                if(Math.hypot(hl[8].x - hl[4].x, hl[8].y - hl[4].y) > 0.25 && !window.isT) { 
+                const dist = Math.hypot(hl[8].x - hl[4].x, hl[8].y - hl[4].y);
+                if(dist > 0.3 && !window.isT) { 
                     window.isT = true; nextStep(); setTimeout(() => window.isT = false, 3000); 
                 }
             }
         });
+
         const cam = new Camera(document.getElementById('input-video'), {
             onFrame: async () => { await hands.send({image: document.getElementById('input-video')}); },
             width: 640, height: 480
         });
         cam.start();
     }
+
     function animate() {
         requestAnimationFrame(animate);
         points.rotation.y += 0.001;
+        // 增加火苗微弱晃动
+        if(stateIndex === 1) {
+            points.position.y = Math.sin(Date.now()*0.005)*2;
+        } else {
+            points.position.y = 0;
+        }
         renderer.render(scene, camera);
     }
     init();
