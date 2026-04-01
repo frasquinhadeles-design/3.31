@@ -3,32 +3,27 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>给管老师的 3D 魔法生日惊喜</title>
+    <title>给管老师的生日惊喜</title>
     <style>
         body { margin: 0; overflow: hidden; background: #000; }
         #loading-screen {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.95); display: flex; flex-direction: column;
+            background: #000; display: flex; flex-direction: column;
             justify-content: center; align-items: center; z-index: 1000;
-            transition: opacity 0.5s;
         }
-        .spinner { border: 4px solid #f3f3f3; border-top: 4px solid #ff99cc; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        #status-text { color: #ff99cc; margin-top: 20px; font-family: "Microsoft YaHei"; font-size: 14px; text-align: center; line-height: 1.6; padding: 0 20px;}
-        #input-video { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
-        #hint { position: absolute; bottom: 40px; width: 100%; text-align: center; color: rgba(255,255,255,0.4); font-family: "Microsoft YaHei"; pointer-events: none; z-index: 50; }
+        #status-text { color: #ff99cc; margin-top: 20px; font-family: "Microsoft YaHei"; text-align: center; }
+        #hint { position: absolute; bottom: 30px; width: 100%; text-align: center; color: rgba(255,255,255,0.3); font-family: "Microsoft YaHei"; z-index: 50; pointer-events: none; }
+        #input-video { position: absolute; width: 1px; height: 1px; opacity: 0; }
     </style>
 </head>
 <body>
 
 <div id="loading-screen">
-    <div class="spinner"></div>
-    <div id="status-text">正在加载魔法资源...<br>请确保在网络良好的环境下打开</div>
+    <div id="status-text">正在加载魔法资源...<br>请确保摄像头权限已开启</div>
 </div>
 
-<div id="hint">对着摄像头张开手掌 | 点击屏幕切换形态</div>
+<div id="hint">手掌张开 或 点击屏幕 切换下一阶段</div>
 <video id="input-video" playsinline></video>
-<div id="canvas-container"></div>
 
 <script src="https://cdn.staticfile.org/three.js/r128/three.min.js"></script>
 <script src="https://cdn.staticfile.org/gsap/3.9.1/gsap.min.js"></script>
@@ -37,183 +32,189 @@
 
 <script>
     let scene, camera, renderer, points, geometry;
-    const particleCount = 20000; // 调整粒子数量以平衡效果和性能
-    let state = 'random'; // random, cake, person, text
+    const particleCount = 15000; 
+    let stateIndex = 0; // 0:星空, 1:蛋糕, 2:人物, 3:祝福语
+    
+    // 数据容器
+    const states = [
+        { pos: [], col: [] }, // 星空
+        { pos: [], col: [] }, // 蛋糕
+        { pos: [], col: [] }, // 人物
+        { pos: [], col: [] }  // 文字
+    ];
 
-    // 存储不同形态坐标和颜色的数组
-    let randomPos = [], cakePos = [], personPos = [], textPos = [];
-    let cakeCols = [], personCols = []; // 蛋糕和人物需要保留颜色
-
-    const videoElement = document.getElementById('input-video');
-
-    function init() {
+    async function init() {
         scene = new THREE.Scene();
         camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 1, 1000);
-        camera.position.z = 400;
+        camera.position.z = 450;
 
         renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-        document.getElementById('canvas-container').appendChild(renderer.domElement);
+        document.body.appendChild(renderer.domElement);
 
         geometry = new THREE.BufferGeometry();
-        const positions = new Float32Array(particleCount * 3);
-        const colors = new Float32Array(particleCount * 3);
+        const initialPos = new Float32Array(particleCount * 3);
+        const initialCol = new Float32Array(particleCount * 3);
 
-        // 初始：星空
+        // 预生成所有形态数据
+        createRandomData(0);
+        createCakeData(1);
+        await createPersonData(2); // 处理照片
+        createTextData(3);
+
+        // 初始设为星空
         for(let i=0; i<particleCount; i++) {
-            positions[i*3] = (Math.random() - 0.5) * 800;
-            positions[i*3+1] = (Math.random() - 0.5) * 800;
-            positions[i*3+2] = (Math.random() - 0.5) * 800;
-            randomPos.push(positions[i*3], positions[i*3+1], positions[i*3+2]);
-            
-            // 初始颜色：粉蓝色调
-            colors[i*3] = 0.5; colors[i*3+1] = 0.7; colors[i*3+2] = 1.0; 
+            initialPos[i*3] = states[0].pos[i*3];
+            initialPos[i*3+1] = states[0].pos[i*3+1];
+            initialPos[i*3+2] = states[0].pos[i*3+2];
+            initialCol[i*3] = states[0].col[i*3];
+            initialCol[i*3+1] = states[0].col[i*3+1];
+            initialCol[i*3+2] = states[0].col[i*3+2];
         }
 
-        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-        geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+        geometry.setAttribute('position', new THREE.BufferAttribute(initialPos, 3));
+        geometry.setAttribute('color', new THREE.BufferAttribute(initialCol, 3));
 
         points = new THREE.Points(geometry, new THREE.PointsMaterial({
-            size: 1.8, vertexColors: true, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending
+            size: 2, vertexColors: true, transparent: true, blending: THREE.AdditiveBlending
         }));
         scene.add(points);
 
-        // --- 生成不同形态的坐标和颜色数据 ---
-        createCakeCoords();
-        createPersonCoords(); // 核心：照片粒子化
-        createTextCoords();
-        
+        setupInteraction();
         animate();
     }
 
-    // 1. 生成双层蛋糕坐标和颜色
-    function createCakeCoords() {
+    // --- 各形态数据生成 ---
+    function createRandomData(idx) {
         for(let i=0; i<particleCount; i++) {
-            let x, y, z, r, g, b; const rand = Math.random();
-            if(rand < 0.4) { // 底层 (奶油白)
-                const a = Math.random()*Math.PI*2; const rad = Math.random()*110;
-                x = Math.cos(a)*rad; y = Math.random()*60 - 80; z = Math.sin(a)*rad;
-                r=0.95; g=0.95; b=0.9;
-            } else if(rand < 0.75) { // 上层 (草莓粉)
-                const a = Math.random()*Math.PI*2; const rad = Math.random()*75;
-                x = Math.cos(a)*rad; y = Math.random()*50 - 20; z = Math.sin(a)*rad;
-                r=1.0; g=0.7; b=0.8;
-            } else { // 蜡烛 (金黄)
-                x = (Math.random()-0.5)*10; y = Math.random()*45 + 30; z = (Math.random()-0.5)*10;
-                r=1.0; g=0.9; b=0.3;
+            states[idx].pos.push((Math.random()-0.5)*800, (Math.random()-0.5)*800, (Math.random()-0.5)*800);
+            states[idx].col.push(0.5, 0.8, 1);
+        }
+    }
+
+    function createCakeData(idx) {
+        for(let i=0; i<particleCount; i++) {
+            let x,y,z, r,g,b; const rand = Math.random();
+            if(rand < 0.6) { // 糕体
+                const a = Math.random()*Math.PI*2; const rad = Math.random()*(rand<0.3?100:70);
+                x = Math.cos(a)*rad; y = rand<0.3? Math.random()*50-80 : Math.random()*40-30; z = Math.sin(a)*rad;
+                r=1; g=0.8; b=0.9;
+            } else { // 蜡烛火苗
+                x = (Math.random()-0.5)*10; y = Math.random()*60+20; z = (Math.random()-0.5)*10;
+                r=1; g=0.9; b=0.3;
             }
-            cakePos.push(x, y, z);
-            cakeCols.push(r, g, b);
+            states[idx].pos.push(x, y, z);
+            states[idx].col.push(r, g, b);
         }
     }
 
-    // 2. [核心核心核心]：将 image_2.png 转化为 3D 粒子
-    function createPersonCoords() {
-        // --- 请阅读以下说明 ---
-        // 由于粒子数据量过大（数万行），我无法直接在此代码中包含它们。
-        // 我写了一个在线工具供你使用：
-        // 工具链接：[在这里插入一个临时生成的工具网页链接，例如：http://3d-particle-gen.s3-website.com]
-        // 操作步骤：
-        // 1. 打开上面的链接。
-        // 2. 上传你的 image_2.png。
-        // 3. 工具会自动生成一个文本文件。
-        // 4. 将该文件中的所有内容粘贴到下面的“粘贴数据在这里”区域，覆盖原来的示例数据。
-        
-        // --- 粘贴数据在这里 (以下为示例随机数据，你需要替换掉它们) ---
-        // 示例：每行 6 个数 (x, y, z, r, g, b)
-        for(let i=0; i<particleCount; i++) {
-            // 示例：用一个球体代替
-            const a = Math.random()*Math.PI*2; const b_a = Math.random()*Math.PI; const rad = 100;
-            personPos.push(Math.sin(b_a)*Math.cos(a)*rad, Math.sin(b_a)*Math.sin(a)*rad, Math.cos(b_a)*rad);
-            personCols.push(0.7, 0.7, 1.0); // 示例颜色：浅蓝
-        }
-        // --- 粘贴数据结束 ---
+    function createPersonData(idx) {
+        return new Promise((resolve) => {
+            const img = new Image();
+            img.crossOrigin = "Anonymous";
+            // 使用你上传的人物照片文件名
+            img.src = "1520e7626d199b431b886b4a6dc51335.jpg"; 
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                canvas.width = 150; canvas.height = 150;
+                ctx.drawImage(img, 0, 0, 150, 150);
+                const data = ctx.getImageData(0,0,150,150).data;
+                const temp = [];
+                for(let i=0; i<data.length; i+=4) {
+                    const px = (i/4)%150; const py = Math.floor((i/4)/150);
+                    if(data[i+3] > 100) { // 只要不是太透明
+                        temp.push({x:(px-75)*2.5, y:(75-py)*2.5, r:data[i]/255, g:data[i+1]/255, b:data[i+2]/255});
+                    }
+                }
+                for(let i=0; i<particleCount; i++) {
+                    const p = temp[i % temp.length];
+                    states[idx].pos.push(p.x, p.y, (Math.random()-0.5)*20);
+                    states[idx].col.push(p.r, p.g, p.b);
+                }
+                resolve();
+            };
+            img.onerror = () => { // 图片加载失败的兜底
+                createRandomData(idx); resolve();
+            };
+        });
     }
 
-    // 3. 生成祝福文字坐标
-    function createTextCoords() {
+    function createTextData(idx) {
         const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d');
         canvas.width = 1000; canvas.height = 200;
-        ctx.fillStyle = "white"; ctx.font = "bold 60px Microsoft YaHei, Arial"; ctx.textAlign = "center";
-        ctx.fillText("祝管老师天天开心，生日快乐！", 500, 100);
+        ctx.fillStyle = "white"; ctx.font = "bold 60px Arial"; ctx.textAlign = "center";
+        ctx.fillText("祝管老师生日快乐！", 500, 100);
         const data = ctx.getImageData(0,0,1000,200).data;
-        const temp = [];
-        for(let y=0; y<200; y+=3) for(let x=0; x<1000; x+=3) {
-            if(data[(y*1000+x)*4] > 128) temp.push(x-500, 100-y, 0);
+        const pts = [];
+        for(let y=0; y<200; y+=2) for(let x=0; x<1000; x+=2) {
+            if(data[(y*1000+x)*4] > 128) pts.push(x-500, 100-y, 0);
         }
         for(let i=0; i<particleCount; i++) {
-            const idx = (i % (temp.length/3)) * 3;
-            textPos.push(temp[idx], temp[idx+1], temp[idx+2]);
+            const pidx = (i % (pts.length/3)) * 3;
+            states[idx].pos.push(pts[pidx], pts[pidx+1], pts[pidx+2]);
+            states[idx].col.push(1, 1, 1);
         }
     }
 
-    // 粒子重组核心函数（包含颜色过渡）
-    function morphTo(targetPos, targetCols, fixedColor) {
-        const pos = geometry.attributes.position;
-        const col = geometry.attributes.color;
-        
+    // --- 核心切换逻辑 ---
+    function nextStep() {
+        stateIndex = (stateIndex + 1) % 4;
+        const target = states[stateIndex];
+        const posAttr = geometry.attributes.position;
+        const colAttr = geometry.attributes.color;
+
         for(let i=0; i<particleCount; i++) {
-            // 位置重组
-            gsap.to(pos.array, {
-                [i*3]: targetPos[i*3], [i*3+1]: targetPos[i*3+1], [i*3+2]: targetPos[i*3+2],
-                duration: 2, ease: "power2.inOut", delay: Math.random()*0.5,
-                onUpdate: () => pos.needsUpdate = true
+            // 位置平滑移动
+            gsap.to(posAttr.array, {
+                [i*3]: target.pos[i*3], [i*3+1]: target.pos[i*3+1], [i*3+2]: target.pos[i*3+2],
+                duration: 1.8, ease: "expo.out", delay: Math.random()*0.3,
+                onUpdate: () => posAttr.needsUpdate = true
             });
-            // 颜色过渡
-            let r, g, b;
-            if(targetCols) { r=targetCols[i*3]; g=targetCols[i*3+1]; b=targetCols[i*3+2]; }
-            else if(fixedColor) { r=fixedColor.r; g=fixedColor.g; b=fixedColor.b; }
-            else { r=0.5; g=0.7; b=1.0; } // 默认颜色
-            
-            gsap.to(col.array, {
-                [i*3]: r, [i*3+1]: g, [i*3+2]: b,
-                duration: 1.5, ease: "linear", delay: Math.random()*0.3,
-                onUpdate: () => col.needsUpdate = true
+            // 颜色平滑过渡
+            gsap.to(colAttr.array, {
+                [i*3]: target.col[i*3], [i*3+1]: target.col[i*3+1], [i*3+2]: target.col[i*3+2],
+                duration: 1.2, onUpdate: () => colAttr.needsUpdate = true
             });
         }
     }
 
-    // --- 核心交互逻辑 ---
-    function nextState() {
-        if(state === 'random') { morphTo(cakePos, cakeCols); state = 'cake'; }
-        else if(state === 'cake') { morphTo(personPos, personCols); state = 'person'; }
-        else if(state === 'person') { morphTo(textPos, null, {r:1, g:1, b:1}); state = 'text'; }
-        else if(state === 'text') { morphTo(randomPos); state = 'random'; }
-        console.log("当前形态:", state);
+    function setupInteraction() {
+        // 1. 点击交互
+        window.addEventListener('click', nextStep);
+
+        // 2. 手势交互
+        const hands = new Hands({locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`});
+        hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.6 });
+        hands.onResults(res => {
+            document.getElementById('loading-screen').style.display = 'none';
+            if(res.multiHandLandmarks?.length > 0) {
+                const hl = res.multiHandLandmarks[0];
+                const dist = Math.hypot(hl[8].x - hl[4].x, hl[8].y - hl[4].y);
+                if(dist > 0.25) { 
+                    // 增加防抖处理，防止一次张手触发多次切换
+                    if(!window.isTransitioning) {
+                        window.isTransitioning = true;
+                        nextStep();
+                        setTimeout(() => window.isTransitioning = false, 2500); 
+                    }
+                }
+            }
+        });
+
+        new Camera(document.getElementById('input-video'), {
+            onFrame: async () => { await hands.send({image: document.getElementById('input-video')}); },
+            width: 640, height: 480
+        }).start();
     }
-
-    // 1. 手势检测
-    const hands = new Hands({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}` });
-    hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.6 });
-    hands.onResults(results => {
-        document.getElementById('loading-screen').style.opacity = 0;
-        setTimeout(()=>{document.getElementById('loading-screen').style.display = 'none';}, 500);
-        if(results.multiHandLandmarks?.length > 0) {
-            const hl = results.multiHandLandmarks[0];
-            const dist = Math.hypot(hl[8].x - hl[4].x, hl[8].y - hl[4].y);
-            // 手掌张开切换
-            if(dist > 0.22) { nextState(); }
-        }
-    });
-
-    const cameraHelper = new Camera(videoElement, {
-        onFrame: async () => { await hands.send({image: videoElement}); },
-        width: 640, height: 480
-    });
-
-    // 2. 点击保底
-    window.addEventListener('click', () => { nextState(); });
 
     function animate() {
         requestAnimationFrame(animate);
-        points.rotation.y += 0.001;
-        points.material.size = 1.6 + Math.sin(Date.now()*0.003)*0.4;
+        points.rotation.y += 0.0015;
         renderer.render(scene, camera);
     }
 
     init();
-    cameraHelper.start();
 </script>
 </body>
 </html>
