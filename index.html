@@ -214,7 +214,81 @@
         renderer.render(scene, camera);
     }
 
-    init();
+    init();// --- 1. 找到这个函数并替换整个函数体 ---
+function createPersonData(idx) {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.crossOrigin = "Anonymous"; 
+        // 关键：确保这里和你仓库的文件名一模一样
+        img.src = "person.jpg"; 
+
+        img.onload = () => {
+            console.log("人物图片读取成功！");
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            const size = 200; // 采样精度
+            canvas.width = size;
+            canvas.height = size;
+            
+            ctx.drawImage(img, 0, 0, size, size);
+            const imageData = ctx.getImageData(0, 0, size, size).data;
+            
+            const temp = [];
+            for (let y = 0; y < size; y++) {
+                for (let x = 0; x < size; x++) {
+                    const i = (y * size + x) * 4;
+                    // 过滤算法：只保留不透明且不是纯黑的像素
+                    if (imageData[i+3] > 120) { 
+                        temp.push({
+                            x: (x - size/2) * 2.2, 
+                            y: (size/2 - y) * 2.2, 
+                            r: imageData[i]/255, 
+                            g: imageData[i+1]/255, 
+                            b: imageData[i+2]/255
+                        });
+                    }
+                }
+            }
+
+            // 将照片像素分配给粒子系统
+            for (let i = 0; i < particleCount; i++) {
+                const p = temp[i % temp.length];
+                states[idx].pos.push(p.x, p.y, (Math.random()-0.5)*15);
+                states[idx].col.push(p.r, p.g, p.b);
+            }
+            resolve();
+        };
+
+        img.onerror = () => {
+            console.error("图片加载失败，请检查文件名");
+            createRandomData(idx); // 兜底：加载失败显示星空
+            resolve();
+        };
+    });
+}
+
+// --- 2. 确保你的切换逻辑如下（控制形态循环） ---
+function nextStep() {
+    // 状态循环：0星空 -> 1蛋糕 -> 2人物 -> 3祝福语
+    stateIndex = (stateIndex + 1) % 4; 
+    const target = states[stateIndex];
+    const posAttr = geometry.attributes.position;
+    const colAttr = geometry.attributes.color;
+
+    for(let i=0; i<particleCount; i++) {
+        // 粒子移动动画
+        gsap.to(posAttr.array, {
+            [i*3]: target.pos[i*3], [i*3+1]: target.pos[i*3+1], [i*3+2]: target.pos[i*3+2],
+            duration: 2, ease: "expo.out", delay: Math.random()*0.3,
+            onUpdate: () => posAttr.needsUpdate = true
+        });
+        // 颜色变换动画
+        gsap.to(colAttr.array, {
+            [i*3]: target.col[i*3], [i*3+1]: target.col[i*3+1], [i*3+2]: target.col[i*3+2],
+            duration: 1.5, onUpdate: () => colAttr.needsUpdate = true
+        });
+    }
+}
 </script>
 </body>
 </html>
