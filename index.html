@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>给管老师的生日惊喜 v12.0</title>
+    <title>管老师生日快乐 - 高敏手势版</title>
     <style>
         body { margin: 0; overflow: hidden; background: #000; touch-action: none; -webkit-tap-highlight-color: transparent; }
         #loading-screen {
@@ -20,12 +20,10 @@
 
 <div id="loading-screen" onclick="startMagic()">
     <div style="border: 3px solid #333; border-top: 3px solid #ff99cc; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite;"></div>
-    <div id="status-text">✨ 正在校准 3:4 竖屏魔法...<br>点击屏幕 [开启惊喜]</div>
+    <div id="status-text">✨ 正在注入高灵敏手势...<br>点击屏幕 [立即开启]</div>
 </div>
 
-<style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
-
-<div id="hint">张开手掌触发魔法 | 或点击屏幕</div>
+<div id="hint">挥动手掌即刻触发 | 点击屏幕切换</div>
 <video id="input-video" playsinline muted autoplay></video>
 
 <script src="https://cdn.staticfile.org/three.js/r128/three.min.js"></script>
@@ -37,10 +35,10 @@
     let scene, camera, renderer, points, geometry;
     const particleCount = 20000;
     let stateIndex = 0;
-    window.isT = false; // 全局冷却锁
+    // 移除冷却锁，改为状态判定
+    let lastHandState = false; 
     const states = [{pos:[], col:[]}, {pos:[], col:[]}, {pos:[], col:[]}, {pos:[] , col:[]}];
 
-    // 初始化 3D 场景
     async function init() {
         scene = new THREE.Scene();
         camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 1, 2000);
@@ -71,12 +69,8 @@
         animate();
     }
 
-    // 核心修改：手势交互启动逻辑
     function startMagic() {
-        const loading = document.getElementById('loading-screen');
-        loading.style.display = 'none';
-        
-        // 必须在用户点击事件内 play()，否则相机流会被 Safari 挂起
+        document.getElementById('loading-screen').style.display = 'none';
         const video = document.getElementById('input-video');
         video.play();
 
@@ -86,8 +80,8 @@
 
         hands.setOptions({
             maxNumHands: 1,
-            modelComplexity: 1,
-            minDetectionConfidence: 0.6,
+            modelComplexity: 0, // 降低复杂度以提升响应频率
+            minDetectionConfidence: 0.5,
             minTrackingConfidence: 0.5
         });
 
@@ -97,31 +91,31 @@
             onFrame: async () => {
                 await hands.send({image: video});
             },
-            width: 640,
-            height: 480
+            width: 480, // 降低分辨率提升计算速度
+            height: 360
         });
         cam.start();
     }
 
-    // 手势识别结果回调
     function onResults(results) {
         if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
             const landmarks = results.multiHandLandmarks[0];
             
-            // 算法优化：检测中指尖到掌心的垂直距离
-            // 这种方式比检测指尖距离在手机端更稳定（手掌完全张开即触发）
+            // 高灵敏判定：中指尖到掌心垂直距离
             const dy = landmarks[0].y - landmarks[12].y; 
+            const isHandOpen = dy > 0.25; // 降低阈值提升灵敏度
 
-            if (dy > 0.35 && !window.isT) {
-                window.isT = true;
+            // 只要检测到从“合拢”到“张开”的过程就触发，且不设冷却
+            if (isHandOpen && !lastHandState) {
                 nextStep();
-                // 冷却 3 秒，防止连续触发
-                setTimeout(() => { window.isT = false; }, 3000);
             }
+            lastHandState = isHandOpen;
+        } else {
+            lastHandState = false;
         }
     }
 
-    // 数据生成逻辑保持不变...
+    // --- 数据生成部分逻辑保持 3:4 比例 ---
     function createStarData(idx) {
         for(let i=0; i<particleCount; i++) {
             states[idx].pos.push((Math.random()-0.5)*1000, (Math.random()-0.5)*1000, (Math.random()-0.5)*1000);
@@ -170,11 +164,7 @@
                     for (let x = 0; x < sw; x++) {
                         const i = (y * sw + x) * 4;
                         if (data[i+3] > 60) {
-                            temp.push({
-                                x: (x - sw/2) * zoom, 
-                                y: (sh/2 - y) * zoom - 30, 
-                                r: data[i]/255, g: data[i+1]/255, b: data[i+2]/255
-                            });
+                            temp.push({x: (x - sw/2) * zoom, y: (sh/2 - y) * zoom - 30, r: data[i]/255, g: data[i+1]/255, b: data[i+2]/255});
                         }
                     }
                 }
@@ -212,26 +202,27 @@
         const target = states[stateIndex];
         const posAttr = geometry.attributes.position;
         const colAttr = geometry.attributes.color;
+        
+        // 缩短动画持续时间 (1.5s)，提升连招感
         for(let i=0; i<particleCount; i++) {
             gsap.to(posAttr.array, {
                 [i*3]: target.pos[i*3], [i*3+1]: target.pos[i*3+1], [i*3+2]: target.pos[i*3+2],
-                duration: 2.2, ease: "power3.inOut", delay: Math.random()*0.3,
+                duration: 1.5, ease: "expo.out", delay: Math.random()*0.1,
                 onUpdate: () => posAttr.needsUpdate = true
             });
             gsap.to(colAttr.array, {
                 [i*3]: target.col[i*3], [i*3+1]: target.col[i*3+1], [i*3+2]: target.col[i*3+2],
-                duration: 1.5, onUpdate: () => colAttr.needsUpdate = true
+                duration: 1.0, onUpdate: () => colAttr.needsUpdate = true
             });
         }
     }
 
     function animate() {
         requestAnimationFrame(animate);
-        points.rotation.y += 0.001;
+        points.rotation.y += 0.0015;
         renderer.render(scene, camera);
     }
     
-    // 启动 3D
     init();
 </script>
 </body>
