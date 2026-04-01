@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>给管老师的生日惊喜 v12.0</title>
+    <title>给管老师的生日惊喜 v11.0</title>
     <style>
         body { margin: 0; overflow: hidden; background: #000; touch-action: none; }
         #loading-screen {
@@ -20,11 +20,11 @@
 
 <div id="loading-screen" onclick="this.style.display='none'">
     <div style="border: 3px solid #333; border-top: 3px solid #ff99cc; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite;"></div>
-    <div id="status-text">✨ 正在点燃魔法手势感应...<br>若 5 秒未进入请点击屏幕</div>
+    <div id="status-text">✨ 正在强力校准 3:4 竖屏魔法...<br>若 5 秒未进入请点击屏幕</div>
 </div>
 <style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
 
-<div id="hint">手掌张开触发魔法 | 或点击屏幕</div>
+<div id="hint">手掌张开触发切换 | 或点击屏幕</div>
 <video id="input-video" playsinline muted autoplay></video>
 
 <script src="https://cdn.staticfile.org/three.js/r128/three.min.js"></script>
@@ -36,7 +36,6 @@
     let scene, camera, renderer, points, geometry;
     const particleCount = 20000; 
     let stateIndex = 0; 
-    window.isT = false; // 初始化手势防抖锁
     const states = [{pos:[], col:[]}, {pos:[], col:[]}, {pos:[], col:[]}, {pos:[], col:[]}];
 
     async function init() {
@@ -46,14 +45,15 @@
 
         renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.setPixelRatio(window.devicePixelRatio);
         document.body.appendChild(renderer.domElement);
 
         geometry = new THREE.BufferGeometry();
         
+        // 预生成所有数据
         createStarData(0); 
-        createDoubleCakeData(1);   
-        await loadPerson34Strict(2); 
+        createLuxCakeData(1);   
+        await loadPerson34Strict(2); // 强力 3:4 裁剪
         createSingleText(3);   
 
         const initialPos = new Float32Array(states[0].pos);
@@ -62,13 +62,13 @@
         geometry.setAttribute('color', new THREE.BufferAttribute(initialCol, 3));
 
         points = new THREE.Points(geometry, new THREE.PointsMaterial({
-            size: 2.3, vertexColors: true, transparent: true, blending: THREE.AdditiveBlending
+            size: 2.5, vertexColors: true, transparent: true, blending: THREE.AdditiveBlending
         }));
         scene.add(points);
 
         setupInteraction();
         animate();
-        setTimeout(() => { if(document.getElementById('loading-screen')) document.getElementById('loading-screen').style.display = 'none'; }, 2000);
+        setTimeout(() => document.getElementById('loading-screen').style.display = 'none', 1000);
     }
 
     function createStarData(idx) {
@@ -78,25 +78,26 @@
         }
     }
 
-    function createDoubleCakeData(idx) {
+    function createLuxCakeData(idx) {
         for(let i=0; i<particleCount; i++) {
             let x,y,z, r,g,b; const rand = Math.random();
-            if(rand < 0.4) { // 底层奶油
-                const a = Math.random()*Math.PI*2; const rad = Math.random()*120;
-                x = Math.cos(a)*rad; y = Math.random()*50-100; z = Math.sin(a)*rad;
-                r=0.98; g=0.95; b=0.98;
-            } else if(rand < 0.7) { // 糕层
-                const a = Math.random()*Math.PI*2; const rad = Math.random()*85;
-                x = Math.cos(a)*rad; y = Math.random()*45-45; z = Math.sin(a)*rad;
-                r=1; g=0.75; b=0.85;
+            if(rand < 0.45) { // 底座
+                const a = Math.random()*Math.PI*2; const rad = Math.random()*110;
+                x = Math.cos(a)*rad; y = Math.random()*50-120; z = Math.sin(a)*rad;
+                r=0.9; g=0.9; b=0.95;
+            } else if(rand < 0.8) { // 糕层
+                const a = Math.random()*Math.PI*2; const rad = Math.random()*80;
+                x = Math.cos(a)*rad; y = Math.random()*50-50; z = Math.sin(a)*rad;
+                r=1; g=0.7; b=0.8;
             } else { // 蜡烛火苗
-                x = (Math.random()-0.5)*12; y = Math.random()*75+20; z = (Math.random()-0.5)*12;
+                x = (Math.random()-0.5)*15; y = Math.random()*80+20; z = (Math.random()-0.5)*15;
                 r=1; g=0.5; b=0.2;
             }
             states[idx].pos.push(x, y, z); states[idx].col.push(r, g, b);
         }
     }
 
+    // --- 【终极修复】强制锁定 3:4 竖向坐标系 ---
     function loadPerson34Strict(idx) {
         return new Promise((resolve) => {
             const img = new Image();
@@ -105,21 +106,31 @@
             img.onload = () => {
                 const canvas = document.createElement('canvas');
                 const ctx = canvas.getContext('2d');
+                // 采样分辨率
                 const sw = 150, sh = 200; 
                 canvas.width = sw; canvas.height = sh;
+                
+                // 暴力算法：无视原图，截取中心并强制填入 3:4 画布
                 let iw = img.width, ih = img.height;
-                let aspect = 0.75;
+                let aspect = 0.75; // 3/4
                 let cw = iw, ch = ih;
                 if (iw / ih > aspect) { cw = ih * aspect; } else { ch = iw / aspect; }
+                
                 ctx.drawImage(img, (iw-cw)/2, (ih-ch)/2, cw, ch, 0, 0, sw, sh);
                 const data = ctx.getImageData(0, 0, sw, sh).data;
                 const temp = [];
+                // 缩放倍率调高，确保竖向高大
                 const zoom = 2.8; 
+
                 for (let y = 0; y < sh; y++) {
                     for (let x = 0; x < sw; x++) {
                         const i = (y * sw + x) * 4;
                         if (data[i+3] > 60) {
-                            temp.push({x: (x - sw/2) * zoom, y: (sh/2 - y) * zoom - 30, r: data[i]/255, g: data[i+1]/255, b: data[i+2]/255});
+                            temp.push({
+                                x: (x - sw/2) * zoom, 
+                                y: (sh/2 - y) * zoom - 30, // 整体下移 30 避开手机顶部
+                                r: data[i]/255, g: data[i+1]/255, b: data[i+2]/255
+                            });
                         }
                     }
                 }
@@ -134,6 +145,7 @@
         });
     }
 
+    // --- 【文字修复】单行蓝粉渐变 ---
     function createSingleText(idx) {
         const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d');
         canvas.width = 600; canvas.height = 200;
@@ -141,12 +153,12 @@
         ctx.fillText("管老师，生日快乐", 300, 110);
         const data = ctx.getImageData(0,0,600,200).data;
         const pts = [];
-        for(let y=0; y<200; y+=2.2) for(let x=0; x<600; x+=2.2) {
+        for(let y=0; y<200; y+=2) for(let x=0; x<600; x+=2) {
             if(data[(y*600+x)*4] > 120) pts.push({x: x-300, y: 100-y});
         }
         for(let i=0; i<particleCount; i++) {
             const p = pts[i % pts.length];
-            states[idx].pos.push(p.x * 1.3, p.y * 1.3, 0);
+            states[idx].pos.push(p.x * 1.4, p.y * 1.4, 0);
             const ratio = (p.x + 250) / 500;
             states[idx].col.push(0.4 + ratio * 0.6, 0.6, 0.9 - ratio * 0.2); 
         }
@@ -160,7 +172,7 @@
         for(let i=0; i<particleCount; i++) {
             gsap.to(posAttr.array, {
                 [i*3]: target.pos[i*3], [i*3+1]: target.pos[i*3+1], [i*3+2]: target.pos[i*3+2],
-                duration: 2, ease: "power3.inOut", delay: Math.random()*0.3,
+                duration: 2.2, ease: "power3.inOut", delay: Math.random()*0.3,
                 onUpdate: () => posAttr.needsUpdate = true
             });
             gsap.to(colAttr.array, {
@@ -171,51 +183,29 @@
     }
 
     function setupInteraction() {
-        // 点击保底切换
         window.addEventListener('click', nextStep);
-        
         const video = document.getElementById('input-video');
         const hands = new Hands({locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`});
-        
-        hands.setOptions({
-            maxNumHands: 1,
-            modelComplexity: 1,
-            minDetectionConfidence: 0.5,
-            minTrackingConfidence: 0.5
-        });
-
+        hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.6 });
         hands.onResults(res => {
-            // 如果手部出现
-            if(res.multiHandLandmarks && res.multiHandLandmarks.length > 0) {
+            if(res.multiHandLandmarks?.length > 0) {
                 const hl = res.multiHandLandmarks[0];
-                // 简单的判定：食指尖到大拇指尖的距离（张开手掌距离会变大）
                 const dist = Math.hypot(hl[8].x - hl[4].x, hl[8].y - hl[4].y);
-                
                 if(dist > 0.3 && !window.isT) {
-                    window.isT = true;
-                    nextStep();
-                    setTimeout(() => { window.isT = false; }, 3000); // 冷却3秒防止连续触发
+                    window.isT = true; nextStep(); setTimeout(() => window.isT = false, 3000);
                 }
             }
         });
-
         const cam = new Camera(video, {
-            onFrame: async () => {
-                await hands.send({image: video});
-            },
-            width: 640,
-            height: 480
+            onFrame: async () => { await hands.send({image: video}); },
+            width: 640, height: 480
         });
-        
-        // 关键：静音启动相机
-        cam.start().catch(e => {
-            console.log("摄像头启动受限，请确保在 HTTPS 环境下运行并授予权限");
-        });
+        cam.start().catch(() => console.log("摄像头启动受限"));
     }
 
     function animate() {
         requestAnimationFrame(animate);
-        points.rotation.y += 0.0012;
+        points.rotation.y += 0.001;
         renderer.render(scene, camera);
     }
     init();
