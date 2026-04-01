@@ -3,151 +3,120 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>祝管老师生日快乐</title>
+    <title>给管老师的生日惊喜</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #050505; }
-        #loading {
+        body { margin: 0; overflow: hidden; background: #000; }
+        #gui-hint {
             position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            color: #ff99cc; font-family: "Microsoft YaHei"; text-align: center; z-index: 100;
-            text-shadow: 0 0 10px rgba(255,153,204,0.5);
+            color: #ff99cc; font-family: "Microsoft YaHei"; text-align: center;
+            z-index: 100; pointer-events: none; transition: opacity 0.5s;
+            text-shadow: 0 0 10px rgba(255,153,204,0.8);
         }
-        #hint {
+        #bottom-tips {
             position: absolute; bottom: 30px; width: 100%; text-align: center;
-            color: rgba(255,255,255,0.4); font-family: "Microsoft YaHei"; pointer-events: none;
+            color: rgba(255,255,255,0.4); font-size: 14px; pointer-events: none;
         }
-        #input-video { position: absolute; width: 1px; height: 1px; opacity: 0; }
     </style>
 </head>
 <body>
 
-<div id="loading">🎂 正在准备惊喜...<br>(加载失败请点击屏幕直接开启)</div>
-<div id="hint">手掌张开触发蛋糕 | 点击屏幕熄灭蜡烛</div>
-<video id="input-video"></video>
-<div id="canvas-container"></div>
+<div id="gui-hint">✨ 这里的星空藏着惊喜<br>请点击屏幕开启</div>
+<div id="bottom-tips">点击屏幕：星空 → 蛋糕 → 祝福文字</div>
 
-<script src="https://cdn.jsdelivr.net/npm/three@0.145.0/build/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.11.4/gsap.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.9.1/gsap.min.js"></script>
 
 <script>
     let scene, camera, renderer, points, geometry;
-    const particleCount = 20000;
-    let cakePositions = [], textPositions = [];
-    let state = 'random'; // random, cake, text
+    const particleCount = 15000;
+    let cakePos = [], textPos = [], randomPos = [];
+    let state = 0; // 0:星空, 1:蛋糕, 2:文字
 
     function init() {
         scene = new THREE.Scene();
-        camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 1, 2000);
-        camera.position.z = 500;
+        camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 1, 1000);
+        camera.position.z = 400;
 
         renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
-        document.getElementById('canvas-container').appendChild(renderer.domElement);
+        document.body.appendChild(renderer.domElement);
 
         geometry = new THREE.BufferGeometry();
         const positions = new Float32Array(particleCount * 3);
-        const colors = new Float32Array(particleCount * 3);
-
-        for(let i=0; i<particleCount; i++) {
-            positions[i*3] = (Math.random() - 0.5) * 1000;
-            positions[i*3+1] = (Math.random() - 0.5) * 1000;
-            positions[i*3+2] = (Math.random() - 0.5) * 1000;
-            colors[i*3] = 1; colors[i*3+1] = 0.8; colors[i*3+2] = 0.9;
+        for (let i = 0; i < particleCount; i++) {
+            positions[i*3] = (Math.random() - 0.5) * 800;
+            positions[i*3+1] = (Math.random() - 0.5) * 800;
+            positions[i*3+2] = (Math.random() - 0.5) * 800;
+            randomPos.push(positions[i*3], positions[i*3+1], positions[i*3+2]);
         }
-
         geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-        geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
-        points = new THREE.Points(geometry, new THREE.PointsMaterial({
-            size: 2, vertexColors: true, blending: THREE.AdditiveBlending, transparent: true, opacity: 0.8
-        }));
+        const material = new THREE.PointsMaterial({
+            size: 2, color: 0xffffff, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending
+        });
+        points = new THREE.Points(geometry, material);
         scene.add(points);
-        
+
         createCakeCoords();
         createTextCoords();
         animate();
     }
 
-    // 生成双层蛋糕坐标
     function createCakeCoords() {
-        for(let i=0; i<particleCount; i++) {
+        for (let i = 0; i < particleCount; i++) {
             let x, y, z;
             const r = Math.random();
-            if(r < 0.4) { // 底层
-                const angle = Math.random() * Math.PI * 2;
-                const radius = Math.random() * 120;
-                x = Math.cos(angle) * radius;
-                y = Math.random() * 60 - 100;
-                z = Math.sin(angle) * radius;
-            } else if (r < 0.7) { // 第二层
-                const angle = Math.random() * Math.PI * 2;
-                const radius = Math.random() * 80;
-                x = Math.cos(angle) * radius;
-                y = Math.random() * 50 - 40;
-                z = Math.sin(angle) * radius;
-            } else if (r < 0.95) { // 蜡烛
-                x = (Math.random() - 0.5) * 10;
-                y = Math.random() * 40 + 10;
-                z = (Math.random() - 0.5) * 10;
-            } else { // 火苗
-                x = (Math.random() - 0.5) * 5;
-                y = Math.random() * 15 + 50;
-                z = (Math.random() - 0.5) * 5;
+            if (r < 0.5) { // 底层圆柱
+                const a = Math.random() * Math.PI * 2;
+                const rad = Math.random() * 100;
+                x = Math.cos(a) * rad; y = Math.random() * 60 - 80; z = Math.sin(a) * rad;
+            } else if (r < 0.85) { // 上层圆柱
+                const a = Math.random() * Math.PI * 2;
+                const rad = Math.random() * 70;
+                x = Math.cos(a) * rad; y = Math.random() * 50 - 20; z = Math.sin(a) * rad;
+            } else { // 蜡烛
+                x = (Math.random() - 0.5) * 10; y = Math.random() * 50 + 30; z = (Math.random() - 0.5) * 10;
             }
-            cakePositions.push(x, y, z);
+            cakePos.push(x, y, z);
         }
     }
 
     function createTextCoords() {
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
-        canvas.width = 1000; canvas.height = 200;
+        canvas.width = 800; canvas.height = 200;
         ctx.fillStyle = "white";
-        ctx.font = "bold 60px Arial";
+        ctx.font = "bold 50px Arial";
         ctx.textAlign = "center";
-        ctx.fillText("祝管老师生日快乐！", 500, 100);
-        const data = ctx.getImageData(0,0,1000,200).data;
-        const pts = [];
-        for(let y=0; y<200; y+=2) for(let x=0; x<1000; x+=2) {
-            if(data[(y*1000+x)*4] > 128) pts.push((x-500), (100-y), 0);
+        ctx.fillText("祝管老师生日快乐！", 400, 100);
+        const data = ctx.getImageData(0,0,800,200).data;
+        const temp = [];
+        for(let y=0; y<200; y+=3) for(let x=0; x<800; x+=3) {
+            if(data[(y*800+x)*4] > 128) temp.push(x-400, 100-y, 0);
         }
         for(let i=0; i<particleCount; i++) {
-            const idx = (i % (pts.length/3)) * 3;
-            textPositions.push(pts[idx], pts[idx+1], pts[idx+2]);
+            const idx = (i % (temp.length/3)) * 3;
+            textPos.push(temp[idx], temp[idx+1], temp[idx+2]);
         }
     }
 
-    function morph(targetArr) {
-        const pos = geometry.attributes.position;
-        for(let i=0; i<particleCount; i++) {
-            gsap.to(pos.array, {
-                [i*3]: targetArr[i*3], [i*3+1]: targetArr[i*3+1], [i*3+2]: targetArr[i*3+2],
-                duration: 2, ease: "power2.inOut", delay: Math.random() * 0.5,
-                onUpdate: () => pos.needsUpdate = true
+    function transform(target) {
+        const current = geometry.attributes.position.array;
+        for (let i = 0; i < particleCount; i++) {
+            gsap.to(current, {
+                [i*3]: target[i*3], [i*3+1]: target[i*3+1], [i*3+2]: target[i*3+2],
+                duration: 1.5, ease: "power2.out", delay: Math.random() * 0.3,
+                onUpdate: () => geometry.attributes.position.needsUpdate = true
             });
         }
     }
 
-    // 交互逻辑
     window.addEventListener('click', () => {
-        document.getElementById('loading').style.display = 'none';
-        if(state === 'random') {
-            morph(cakePositions); state = 'cake';
-        } else if(state === 'cake') {
-            morph(textPositions); state = 'text';
-        }
-    });
-
-    const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
-    hands.setOptions({ maxNumHands: 1, minDetectionConfidence: 0.6 });
-    hands.onResults(results => {
-        document.getElementById('loading').style.display = 'none';
-        if(results.multiHandLandmarks?.length > 0) {
-            const hl = results.multiHandLandmarks[0];
-            const dist = Math.hypot(hl[8].x - hl[4].x, hl[8].y - hl[4].y);
-            if(dist > 0.25 && state === 'random') { morph(cakePositions); state = 'cake'; }
-        }
+        document.getElementById('gui-hint').style.opacity = 0;
+        state++;
+        if (state === 1) transform(cakePos);
+        if (state === 2) transform(textPos);
+        if (state === 3) { transform(randomPos); state = 0; }
     });
 
     function animate() {
@@ -156,48 +125,12 @@
         renderer.render(scene, camera);
     }
 
-    new Camera(document.getElementById('input-video'), {
-        onFrame: async () => { await hands.send({image: document.getElementById('input-video')}); },
-        width: 640, height: 480
-    }).start();
-
     init();
-</script>// --- 核心交互逻辑优化版 ---
-
-// 1. 增加全局点击监听（保底方案）
-document.body.onclick = () => {
-    // 隐藏加载提示
-    document.getElementById('loading').style.display = 'none';
-    
-    if (state === 'random') {
-        // 从星空变蛋糕
-        morph(cakePositions);
-        state = 'cake';
-        console.log("已切换至蛋糕形态");
-    } else if (state === 'cake') {
-        // 从蛋糕变文字
-        morph(textPositions);
-        state = 'text';
-        console.log("已切换至文字形态");
-    }
-};
-
-// 2. 修改手势回调，确保它不干扰点击逻辑
-hands.onResults(results => {
-    // 只要有结果返回，就隐藏加载提示
-    document.getElementById('loading').style.display = 'none';
-    
-    if(results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-        const hl = results.multiHandLandmarks[0];
-        // 计算食指指尖和拇指指尖距离
-        const dist = Math.hypot(hl[8].x - hl[4].x, hl[8].y - hl[4].y);
-        
-        // 如果手掌张开（距离大）且还在星空状态，变蛋糕
-        if(dist > 0.25 && state === 'random') {
-            morph(cakePositions);
-            state = 'cake';
-        }
-    }
-});
+    window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+</script>
 </body>
 </html>
