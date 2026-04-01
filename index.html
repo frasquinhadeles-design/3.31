@@ -162,6 +162,42 @@
     }).start();
 
     init();
-</script>
+</script>// --- 核心交互逻辑优化版 ---
+
+// 1. 增加全局点击监听（保底方案）
+document.body.onclick = () => {
+    // 隐藏加载提示
+    document.getElementById('loading').style.display = 'none';
+    
+    if (state === 'random') {
+        // 从星空变蛋糕
+        morph(cakePositions);
+        state = 'cake';
+        console.log("已切换至蛋糕形态");
+    } else if (state === 'cake') {
+        // 从蛋糕变文字
+        morph(textPositions);
+        state = 'text';
+        console.log("已切换至文字形态");
+    }
+};
+
+// 2. 修改手势回调，确保它不干扰点击逻辑
+hands.onResults(results => {
+    // 只要有结果返回，就隐藏加载提示
+    document.getElementById('loading').style.display = 'none';
+    
+    if(results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+        const hl = results.multiHandLandmarks[0];
+        // 计算食指指尖和拇指指尖距离
+        const dist = Math.hypot(hl[8].x - hl[4].x, hl[8].y - hl[4].y);
+        
+        // 如果手掌张开（距离大）且还在星空状态，变蛋糕
+        if(dist > 0.25 && state === 'random') {
+            morph(cakePositions);
+            state = 'cake';
+        }
+    }
+});
 </body>
 </html>
